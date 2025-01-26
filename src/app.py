@@ -10,6 +10,7 @@ Main Streamlit application combining:
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from pricing_models import (
     option_price,
@@ -19,7 +20,8 @@ from pricing_models import (
 from utils import fetch_current_price
 
 # For matplotlib styling, you can pick a nicer style
-plt.style.use("seaborn-darkgrid")
+
+sns.set_theme(style="darkgrid") 
 
 def scenario_input_box(scenario_num=1, override_spot=None):
     """
