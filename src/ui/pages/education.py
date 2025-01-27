@@ -4,6 +4,7 @@ import streamlit as st
 from src.ui.components.charts import OptionPayoffChart
 from src.models.black_scholes import BlackScholesModel
 from src.analytics.risk import Position
+from typing import List
 
 def render_page():
     """
