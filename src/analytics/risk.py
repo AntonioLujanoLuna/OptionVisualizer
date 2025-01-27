@@ -8,6 +8,7 @@ import logging
 
 from src.models.base import OptionPricingModel
 from src.config import AppConfig
+from src.analytics.volatility import VolatilitySurface
 
 @dataclass
 class RiskMetrics:
