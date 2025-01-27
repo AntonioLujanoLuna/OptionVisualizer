@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 from .risk import Position, RiskMetrics
+from .visualization import VisualizationConfig 
 from src.config import AppConfig
 
 class PortfolioVisualizer:
