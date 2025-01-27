@@ -3,15 +3,15 @@ import streamlit as st
 from typing import Dict, List, Optional
 import plotly.graph_objects as go
 
-from src.models.black_scholes import BlackScholesModel # Absolute import
-from src.models.binomial import BinomialModel # Absolute import
-from src.models.monte_carlo import MonteCarloModel # Absolute import
-from src.analytics.portfolio_visualization import PortfolioVisualizer # Absolute import
-from src.analytics.strategy_visualization import StrategyVisualizer # Absolute import
-from src.analytics.risk import RiskAnalyzer # Absolute import
-from src.analytics.volatility import VolatilitySurface # Absolute import
+from src.models.black_scholes import BlackScholesModel 
+from src.models.binomial import BinomialModel 
+from src.models.monte_carlo import MonteCarloModel 
+from src.analytics.portfolio_visualization import PortfolioVisualizer 
+from src.analytics.strategy_visualization import StrategyVisualizer 
+from src.analytics.risk import RiskAnalyzer 
+from src.analytics.volatility import VolatilitySurface 
 from .education import OptionsEducation # Relative import (still works within the same package)
-from src.config import AppConfig # Absolute import
+from src.config import AppConfig 
 from .pages.home import render_page as render_home
 from .pages.option_pricing import render_page as render_option_pricing
 from .pages.portfolio import render_page as render_portfolio

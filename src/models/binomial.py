@@ -5,7 +5,7 @@ from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 
 from src.models.base import OptionPricingModel, OptionResult
-from src.utils.validation import validate_parameters
+from src.utils.validators import validate_parameters
 from src.config import AppConfig
 
 @dataclass
