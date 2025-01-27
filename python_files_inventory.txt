@@ -1,4 +1,4 @@
-﻿// Python Files Concatenated on 01/27/2025 17:48:42
+﻿// Python Files Concatenated on 01/27/2025 18:05:17
 // ----------------------------------------
 
 
@@ -2592,101 +2592,6 @@
 0021:     default_rate: float = 0.05
 0022:     default_volatility: float = 0.2
 0023:     default_maturity: float = 1.0
-0024: 
-0025: # src/utils/validation.py
-0026: from functools import wraps
-0027: from typing import Any, Callable
-0028: import numpy as np
-0029: 
-0030: class ValidationError(Exception):
-0031:     """Custom exception for parameter validation errors."""
-0032:     pass
-0033: 
-0034: def validate_parameters(func: Callable) -> Callable:
-0035:     """Decorator to validate option pricing parameters."""
-0036:     @wraps(func)
-0037:     def wrapper(self, S: float, K: float, r: float, sigma: float, T: float, *args, **kwargs) -> Any:
-0038:         if S <= 0:
-0039:             raise ValidationError("Stock price must be positive")
-0040:         if K <= 0:
-0041:             raise ValidationError("Strike price must be positive")
-0042:         if sigma <= 0:
-0043:             raise ValidationError("Volatility must be positive")
-0044:         if T < 0:
-0045:             raise ValidationError("Time to maturity cannot be negative")
-0046:         return func(self, S, K, r, sigma, T, *args, **kwargs)
-0047:     return wrapper
-0048: 
-0049: # src/utils/optimization.py
-0050: from typing import Callable, Tuple
-0051: import numpy as np
-0052: from ..config import AppConfig
-0053: 
-0054: def newton_raphson(f: Callable, fprime: Callable, x0: float, 
-0055:                   tol: float = AppConfig.epsilon, 
-0056:                   max_iter: int = AppConfig.max_iterations) -> Tuple[float, bool]:
-0057:     """
-0058:     Implementation of Newton-Raphson method for root finding.
-0059:     
-0060:     Args:
-0061:         f: Function for which we want to find the root
-0062:         fprime: Derivative of f
-0063:         x0: Initial guess
-0064:         tol: Tolerance for convergence
-0065:         max_iter: Maximum number of iterations
-0066:     
-0067:     Returns:
-0068:         Tuple containing the root and a boolean indicating convergence
-0069:     """
-0070:     x = x0
-0071:     for _ in range(max_iter):
-0072:         fx = f(x)
-0073:         if abs(fx) < tol:
-0074:             return x, True
-0075:         
-0076:         fpx = fprime(x)
-0077:         if abs(fpx) < tol:
-0078:             return x, False
-0079:         
-0080:         x = x - fx/fpx
-0081:     
-0082:     return x, False
-0083: 
-0084: # src/utils/decorators.py
-0085: from functools import lru_cache, wraps
-0086: import time
-0087: from typing import Any, Callable
-0088: 
-0089: def timer(func: Callable) -> Callable:
-0090:     """Decorator to measure function execution time."""
-0091:     @wraps(func)
-0092:     def wrapper(*args, **kwargs) -> Any:
-0093:         start_time = time.perf_counter()
-0094:         result = func(*args, **kwargs)
-0095:         end_time = time.perf_counter()
-0096:         print(f"{func.__name__} took {end_time - start_time:.4f} seconds")
-0097:         return result
-0098:     return wrapper
-0099: 
-0100: def memoize(func: Callable) -> Callable:
-0101:     """Enhanced memoization decorator with timeout."""
-0102:     cache = {}
-0103:     
-0104:     @wraps(func)
-0105:     def wrapper(*args, **kwargs) -> Any:
-0106:         key = str(args) + str(kwargs)
-0107:         current_time = time.time()
-0108:         
-0109:         if key in cache:
-0110:             result, timestamp = cache[key]
-0111:             if current_time - timestamp < AppConfig.cache_timeout:
-0112:                 return result
-0113:         
-0114:         result = func(*args, **kwargs)
-0115:         cache[key] = (result, current_time)
-0116:         return result
-0117:     
-0118:     return wrapper
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\models\base.py
 // ----------------------------------------
@@ -4221,6 +4126,106 @@
 0368:     
 0369:     else:
 0370:         raise ValueError(f"Unknown model: {model}")
+0371: 
+0372: def black_scholes_greeks_call(S: float, K: float, r: float, sigma: float, T: float) -> Dict[str, float]:
+0373:     """
+0374:     Calculate Greeks for a call option using Black-Scholes model.
+0375:     
+0376:     Args:
+0377:         S: Current stock price
+0378:         K: Strike price
+0379:         r: Risk-free rate (annualized)
+0380:         sigma: Volatility (annualized)
+0381:         T: Time to maturity (in years)
+0382:         
+0383:     Returns:
+0384:         Dictionary containing all Greeks values
+0385:     """
+0386:     if T <= 0:
+0387:         return {
+0388:             'delta': 1.0 if S > K else 0.0,
+0389:             'gamma': 0.0,
+0390:             'theta': 0.0,
+0391:             'vega': 0.0,
+0392:             'rho': 0.0
+0393:         }
+0394:     
+0395:     # Calculate d1 and d2
+0396:     sqrt_T = np.sqrt(T)
+0397:     d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
+0398:     d2 = d1 - sigma * sqrt_T
+0399:     
+0400:     # Common terms
+0401:     nd1 = norm.pdf(d1)
+0402:     Nd1 = norm.cdf(d1)
+0403:     Nd2 = norm.cdf(d2)
+0404:     exp_rt = np.exp(-r * T)
+0405:     
+0406:     # Calculate Greeks
+0407:     delta = Nd1
+0408:     gamma = nd1 / (S * sigma * sqrt_T)
+0409:     theta = (-S * nd1 * sigma / (2 * sqrt_T) -
+0410:              r * K * exp_rt * Nd2)
+0411:     vega = S * sqrt_T * nd1
+0412:     rho = K * T * exp_rt * Nd2
+0413:     
+0414:     return {
+0415:         'delta': delta,
+0416:         'gamma': gamma,
+0417:         'theta': theta,
+0418:         'vega': vega,
+0419:         'rho': rho
+0420:     }
+0421: 
+0422: def black_scholes_greeks_put(S: float, K: float, r: float, sigma: float, T: float) -> Dict[str, float]:
+0423:     """
+0424:     Calculate Greeks for a put option using Black-Scholes model.
+0425:     
+0426:     Args:
+0427:         S: Current stock price
+0428:         K: Strike price
+0429:         r: Risk-free rate (annualized)
+0430:         sigma: Volatility (annualized)
+0431:         T: Time to maturity (in years)
+0432:         
+0433:     Returns:
+0434:         Dictionary containing all Greeks values
+0435:     """
+0436:     if T <= 0:
+0437:         return {
+0438:             'delta': -1.0 if S < K else 0.0,
+0439:             'gamma': 0.0,
+0440:             'theta': 0.0,
+0441:             'vega': 0.0,
+0442:             'rho': 0.0
+0443:         }
+0444:     
+0445:     # Calculate d1 and d2
+0446:     sqrt_T = np.sqrt(T)
+0447:     d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
+0448:     d2 = d1 - sigma * sqrt_T
+0449:     
+0450:     # Common terms
+0451:     nd1 = norm.pdf(d1)
+0452:     Nd1 = norm.cdf(-d1)  # Note the negative d1 for puts
+0453:     Nd2 = norm.cdf(-d2)  # Note the negative d2 for puts
+0454:     exp_rt = np.exp(-r * T)
+0455:     
+0456:     # Calculate Greeks
+0457:     delta = -Nd1  # Negative of the call delta
+0458:     gamma = nd1 / (S * sigma * sqrt_T)  # Same as call
+0459:     theta = (-S * nd1 * sigma / (2 * sqrt_T) +
+0460:              r * K * exp_rt * Nd2)
+0461:     vega = S * sqrt_T * nd1  # Same as call
+0462:     rho = -K * T * exp_rt * Nd2  # Negative of call rho
+0463:     
+0464:     return {
+0465:         'delta': delta,
+0466:         'gamma': gamma,
+0467:         'theta': theta,
+0468:         'vega': vega,
+0469:         'rho': rho
+0470:     }
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\ui\app.py
 // ----------------------------------------
@@ -6825,45 +6830,6 @@
 0145:         )
 0146:         st.dataframe(scenarios_df)
 
-// File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils.py
-// ----------------------------------------
-0001: """
-0002: utils.py
-0003: 
-0004: Utility functions, caching, and data fetching.
-0005: """
-0006: import yfinance as yf
-0007: import streamlit as st
-0008: 
-0009: # Enhance the fetch_current_price function in utils.py
-0010: @st.cache_data
-0011: def fetch_market_data(ticker: str):
-0012:     """
-0013:     Fetches extended market data including implied volatility.
-0014:     """
-0015:     try:
-0016:         stock = yf.Ticker(ticker)
-0017:         hist = stock.history(period="1d")
-0018:         options = stock.options
-0019:         
-0020:         if not hist.empty and options:
-0021:             current_price = float(hist["Close"].iloc[-1])
-0022:             # Get nearest expiry options chain
-0023:             opt = stock.option_chain(options[0])
-0024:             
-0025:             # Calculate average implied volatility
-0026:             avg_iv = (opt.calls['impliedVolatility'].mean() + 
-0027:                      opt.puts['impliedVolatility'].mean()) / 2
-0028:             
-0029:             return {
-0030:                 'price': current_price,
-0031:                 'implied_volatility': avg_iv,
-0032:                 'options_chain': opt
-0033:             }
-0034:     except Exception as e:
-0035:         st.error(f"Error fetching data: {str(e)}")
-0036:     return None
-
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\cache.py
 // ----------------------------------------
 0001: """
@@ -8039,6 +8005,79 @@
 0507:         data.append(row)
 0508:     
 0509:     return pd.DataFrame(data)
+
+// File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\optimization.py
+// ----------------------------------------
+0001: # src/utils/optimization.py
+0002: from typing import Callable, Tuple
+0003: import numpy as np
+0004: from ..config import AppConfig
+0005: 
+0006: def newton_raphson(f: Callable, fprime: Callable, x0: float, 
+0007:                   tol: float = AppConfig.epsilon, 
+0008:                   max_iter: int = AppConfig.max_iterations) -> Tuple[float, bool]:
+0009:     """
+0010:     Implementation of Newton-Raphson method for root finding.
+0011:     
+0012:     Args:
+0013:         f: Function for which we want to find the root
+0014:         fprime: Derivative of f
+0015:         x0: Initial guess
+0016:         tol: Tolerance for convergence
+0017:         max_iter: Maximum number of iterations
+0018:     
+0019:     Returns:
+0020:         Tuple containing the root and a boolean indicating convergence
+0021:     """
+0022:     x = x0
+0023:     for _ in range(max_iter):
+0024:         fx = f(x)
+0025:         if abs(fx) < tol:
+0026:             return x, True
+0027:         
+0028:         fpx = fprime(x)
+0029:         if abs(fpx) < tol:
+0030:             return x, False
+0031:         
+0032:         x = x - fx/fpx
+0033:     
+0034:     return x, False
+0035: 
+0036: # src/utils/decorators.py
+0037: from functools import lru_cache, wraps
+0038: import time
+0039: from typing import Any, Callable
+0040: 
+0041: def timer(func: Callable) -> Callable:
+0042:     """Decorator to measure function execution time."""
+0043:     @wraps(func)
+0044:     def wrapper(*args, **kwargs) -> Any:
+0045:         start_time = time.perf_counter()
+0046:         result = func(*args, **kwargs)
+0047:         end_time = time.perf_counter()
+0048:         print(f"{func.__name__} took {end_time - start_time:.4f} seconds")
+0049:         return result
+0050:     return wrapper
+0051: 
+0052: def memoize(func: Callable) -> Callable:
+0053:     """Enhanced memoization decorator with timeout."""
+0054:     cache = {}
+0055:     
+0056:     @wraps(func)
+0057:     def wrapper(*args, **kwargs) -> Any:
+0058:         key = str(args) + str(kwargs)
+0059:         current_time = time.time()
+0060:         
+0061:         if key in cache:
+0062:             result, timestamp = cache[key]
+0063:             if current_time - timestamp < AppConfig.cache_timeout:
+0064:                 return result
+0065:         
+0066:         result = func(*args, **kwargs)
+0067:         cache[key] = (result, current_time)
+0068:         return result
+0069:     
+0070:     return wrapper
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\validators.py
 // ----------------------------------------
