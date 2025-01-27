@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from .analytics.portfolio_visualization import VisualizationConfig
+from .portfolio_visualization import VisualizationConfig
 from src.models.base import OptionPricingModel
 
 @dataclass
