@@ -1,4 +1,4 @@
-﻿// Python Files Concatenated on 01/26/2025 20:17:48
+﻿// Python Files Concatenated on 01/27/2025 17:20:13
 // ----------------------------------------
 
 
@@ -6779,15 +6779,1645 @@
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\cache.py
 // ----------------------------------------
+0001: """
+0002: Cache utilities for optimizing expensive computations and data retrieval.
+0003: 
+0004: This module provides a flexible caching system with:
+0005: 1. Memory and disk-based caching options
+0006: 2. Configurable expiration and size limits
+0007: 3. Automatic cache invalidation
+0008: 4. Thread-safe operations
+0009: 5. Monitoring and statistics
+0010: """
+0011: 
+0012: import functools
+0013: import threading
+0014: import time
+0015: import pickle
+0016: import os
+0017: from typing import Any, Dict, Optional, Tuple, Callable
+0018: from datetime import datetime, timedelta
+0019: import logging
+0020: from pathlib import Path
+0021: 
+0022: logger = logging.getLogger(__name__)
+0023: 
+0024: class CacheStats:
+0025:     """Tracks cache performance metrics."""
+0026:     
+0027:     def __init__(self):
+0028:         self.hits = 0
+0029:         self.misses = 0
+0030:         self.evictions = 0
+0031:         self._lock = threading.Lock()
+0032:     
+0033:     def record_hit(self):
+0034:         with self._lock:
+0035:             self.hits += 1
+0036:     
+0037:     def record_miss(self):
+0038:         with self._lock:
+0039:             self.misses += 1
+0040:     
+0041:     def record_eviction(self):
+0042:         with self._lock:
+0043:             self.evictions += 1
+0044:     
+0045:     @property
+0046:     def hit_rate(self) -> float:
+0047:         """Calculate cache hit rate."""
+0048:         total = self.hits + self.misses
+0049:         return self.hits / total if total > 0 else 0.0
+0050:     
+0051:     def __str__(self) -> str:
+0052:         return (f"Cache Stats - Hits: {self.hits}, Misses: {self.misses}, "
+0053:                 f"Evictions: {self.evictions}, Hit Rate: {self.hit_rate:.2%}")
+0054: 
+0055: class CacheEntry:
+0056:     """Represents a single cache entry with metadata."""
+0057:     
+0058:     def __init__(self, value: Any, expiry: Optional[datetime] = None):
+0059:         self.value = value
+0060:         self.expiry = expiry
+0061:         self.last_accessed = datetime.now()
+0062:         self.access_count = 0
+0063:     
+0064:     def is_expired(self) -> bool:
+0065:         """Check if the cache entry has expired."""
+0066:         if self.expiry is None:
+0067:             return False
+0068:         return datetime.now() > self.expiry
+0069:     
+0070:     def access(self):
+0071:         """Update entry metadata on access."""
+0072:         self.last_accessed = datetime.now()
+0073:         self.access_count += 1
+0074: 
+0075: class Cache:
+0076:     """
+0077:     Thread-safe cache implementation with memory and disk backing.
+0078:     
+0079:     Features:
+0080:     - LRU eviction policy
+0081:     - Time-based expiration
+0082:     - Size limits
+0083:     - Optional disk persistence
+0084:     - Statistics tracking
+0085:     """
+0086:     
+0087:     def __init__(self, max_size: int = 1000, 
+0088:                  default_ttl: Optional[timedelta] = timedelta(hours=1),
+0089:                  disk_path: Optional[Path] = None):
+0090:         """
+0091:         Initialize cache with configuration parameters.
+0092:         
+0093:         Args:
+0094:             max_size: Maximum number of items to store
+0095:             default_ttl: Default time-to-live for entries
+0096:             disk_path: Optional path for disk persistence
+0097:         """
+0098:         self._cache: Dict[str, CacheEntry] = {}
+0099:         self._lock = threading.Lock()
+0100:         self.max_size = max_size
+0101:         self.default_ttl = default_ttl
+0102:         self.disk_path = disk_path
+0103:         self.stats = CacheStats()
+0104:         
+0105:         # Create disk cache directory if needed
+0106:         if disk_path:
+0107:             disk_path.mkdir(parents=True, exist_ok=True)
+0108:     
+0109:     def get(self, key: str) -> Optional[Any]:
+0110:         """
+0111:         Retrieve a value from the cache.
+0112:         
+0113:         Thread-safe retrieval with automatic expiration handling.
+0114:         """
+0115:         with self._lock:
+0116:             entry = self._cache.get(key)
+0117:             
+0118:             if entry is None:
+0119:                 # Check disk cache if configured
+0120:                 if self.disk_path:
+0121:                     entry = self._load_from_disk(key)
+0122:                 if entry is None:
+0123:                     self.stats.record_miss()
+0124:                     return None
+0125:             
+0126:             # Check expiration
+0127:             if entry.is_expired():
+0128:                 self._remove(key)
+0129:                 self.stats.record_miss()
+0130:                 return None
+0131:             
+0132:             # Update access metadata
+0133:             entry.access()
+0134:             self.stats.record_hit()
+0135:             return entry.value
+0136:     
+0137:     def set(self, key: str, value: Any, ttl: Optional[timedelta] = None) -> None:
+0138:         """
+0139:         Store a value in the cache.
+0140:         
+0141:         Args:
+0142:             key: Cache key
+0143:             value: Value to store
+0144:             ttl: Optional time-to-live override
+0145:         """
+0146:         with self._lock:
+0147:             # Calculate expiry
+0148:             expiry = None
+0149:             if ttl or self.default_ttl:
+0150:                 expiry = datetime.now() + (ttl or self.default_ttl)
+0151:             
+0152:             # Create entry
+0153:             entry = CacheEntry(value, expiry)
+0154:             
+0155:             # Check size limit
+0156:             if len(self._cache) >= self.max_size:
+0157:                 self._evict_lru()
+0158:             
+0159:             # Store in memory
+0160:             self._cache[key] = entry
+0161:             
+0162:             # Store to disk if configured
+0163:             if self.disk_path:
+0164:                 self._save_to_disk(key, entry)
+0165:     
+0166:     def invalidate(self, key: str) -> None:
+0167:         """Remove a specific key from the cache."""
+0168:         with self._lock:
+0169:             self._remove(key)
+0170:     
+0171:     def clear(self) -> None:
+0172:         """Clear all entries from the cache."""
+0173:         with self._lock:
+0174:             self._cache.clear()
+0175:             if self.disk_path:
+0176:                 for file in self.disk_path.glob("*.cache"):
+0177:                     file.unlink()
+0178:     
+0179:     def _evict_lru(self) -> None:
+0180:         """Evict least recently used entry."""
+0181:         if not self._cache:
+0182:             return
+0183:         
+0184:         # Find LRU entry
+0185:         lru_key = min(self._cache.items(), 
+0186:                      key=lambda x: x[1].last_accessed)[0]
+0187:         
+0188:         # Remove it
+0189:         self._remove(lru_key)
+0190:         self.stats.record_eviction()
+0191:     
+0192:     def _remove(self, key: str) -> None:
+0193:         """Remove an entry from both memory and disk."""
+0194:         self._cache.pop(key, None)
+0195:         if self.disk_path:
+0196:             cache_file = self.disk_path / f"{key}.cache"
+0197:             if cache_file.exists():
+0198:                 cache_file.unlink()
+0199:     
+0200:     def _save_to_disk(self, key: str, entry: CacheEntry) -> None:
+0201:         """Save cache entry to disk."""
+0202:         try:
+0203:             cache_file = self.disk_path / f"{key}.cache"
+0204:             with cache_file.open('wb') as f:
+0205:                 pickle.dump(entry, f)
+0206:         except Exception as e:
+0207:             logger.error(f"Failed to save cache entry to disk: {e}")
+0208:     
+0209:     def _load_from_disk(self, key: str) -> Optional[CacheEntry]:
+0210:         """Load cache entry from disk."""
+0211:         try:
+0212:             cache_file = self.disk_path / f"{key}.cache"
+0213:             if not cache_file.exists():
+0214:                 return None
+0215:             
+0216:             with cache_file.open('rb') as f:
+0217:                 return pickle.load(f)
+0218:         except Exception as e:
+0219:             logger.error(f"Failed to load cache entry from disk: {e}")
+0220:             return None
+0221: 
+0222: # Decorator for function-level caching
+0223: def cached(ttl: Optional[timedelta] = None, 
+0224:           key_prefix: str = "",
+0225:           cache_instance: Optional[Cache] = None):
+0226:     """
+0227:     Decorator for caching function results.
+0228:     
+0229:     Args:
+0230:         ttl: Optional time-to-live override
+0231:         key_prefix: Optional prefix for cache keys
+0232:         cache_instance: Optional specific cache instance to use
+0233:     """
+0234:     def decorator(func: Callable):
+0235:         # Use provided cache or create a default one
+0236:         nonlocal cache_instance
+0237:         if cache_instance is None:
+0238:             cache_instance = Cache()
+0239:         
+0240:         @functools.wraps(func)
+0241:         def wrapper(*args, **kwargs):
+0242:             # Generate cache key
+0243:             key_parts = [key_prefix, func.__name__]
+0244:             key_parts.extend(str(arg) for arg in args)
+0245:             key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
+0246:             cache_key = ":".join(key_parts)
+0247:             
+0248:             # Check cache
+0249:             result = cache_instance.get(cache_key)
+0250:             if result is not None:
+0251:                 return result
+0252:             
+0253:             # Compute and cache result
+0254:             result = func(*args, **kwargs)
+0255:             cache_instance.set(cache_key, result, ttl)
+0256:             return result
+0257:         
+0258:         return wrapper
+0259:     return decorator
+0260: 
+0261: # Example usage
+0262: if __name__ == "__main__":
+0263:     # Create cache instance
+0264:     cache = Cache(max_size=100, 
+0265:                  default_ttl=timedelta(minutes=30),
+0266:                  disk_path=Path("cache"))
+0267:     
+0268:     # Example cached function
+0269:     @cached(ttl=timedelta(minutes=5), cache_instance=cache)
+0270:     def expensive_computation(x: int, y: int) -> int:
+0271:         time.sleep(1)  # Simulate expensive work
+0272:         return x + y
+0273:     
+0274:     # Test caching
+0275:     start = time.time()
+0276:     result1 = expensive_computation(1, 2)
+0277:     time1 = time.time() - start
+0278:     
+0279:     start = time.time()
+0280:     result2 = expensive_computation(1, 2)  # Should be cached
+0281:     time2 = time.time() - start
+0282:     
+0283:     print(f"First call: {time1:.2f}s")
+0284:     print(f"Second call: {time2:.2f}s")
+0285:     print(f"Cache stats: {cache.stats}")
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\formatters.py
 // ----------------------------------------
+0001: """
+0002: Formatting utilities for consistent data presentation.
+0003: 
+0004: This module provides formatting functions for:
+0005: 1. Financial values (currency, percentages)
+0006: 2. Option Greeks
+0007: 3. Dates and times
+0008: 4. Portfolio and position data
+0009: 5. Statistical metrics
+0010: """
+0011: 
+0012: import locale
+0013: from datetime import datetime, date
+0014: from typing import Union, Optional, Dict, Any
+0015: from decimal import Decimal
+0016: import re
+0017: 
+0018: # Set locale for currency formatting
+0019: locale.setlocale(locale.LC_ALL, '')
+0020: 
+0021: class FinancialFormatter:
+0022:     """Handles formatting of financial values."""
+0023:     
+0024:     @staticmethod
+0025:     def currency(value: Union[float, Decimal], include_cents: bool = True) -> str:
+0026:         """
+0027:         Format a value as currency.
+0028:         
+0029:         Args:
+0030:             value: The value to format
+0031:             include_cents: Whether to include cents
+0032:             
+0033:         Returns:
+0034:             Formatted currency string
+0035:         """
+0036:         try:
+0037:             if include_cents:
+0038:                 return locale.currency(float(value), grouping=True)
+0039:             return locale.currency(float(value), grouping=True, digits=0)
+0040:         except (ValueError, TypeError):
+0041:             return "$0.00" if include_cents else "$0"
+0042:     
+0043:     @staticmethod
+0044:     def percentage(value: Union[float, Decimal], decimals: int = 2) -> str:
+0045:         """Format a value as a percentage."""
+0046:         try:
+0047:             return f"{float(value):.{decimals}f}%"
+0048:         except (ValueError, TypeError):
+0049:             return "0.00%"
+0050:     
+0051:     @staticmethod
+0052:     def number(value: Union[float, Decimal], decimals: int = 2,
+0053:               use_thousands: bool = True) -> str:
+0054:         """Format a number with optional thousands separator."""
+0055:         try:
+0056:             value_float = float(value)
+0057:             if use_thousands:
+0058:                 return f"{value_float:,.{decimals}f}"
+0059:             return f"{value_float:.{decimals}f}"
+0060:         except (ValueError, TypeError):
+0061:             return "0.00"
+0062:     
+0063:     @staticmethod
+0064:     def delta_value(value: Union[float, Decimal], include_sign: bool = True) -> str:
+0065:         """Format a delta (change) value with sign indicator."""
+0066:         try:
+0067:             value_float = float(value)
+0068:             if include_sign and value_float > 0:
+0069:                 return f"+{value_float:,.2f}"
+0070:             return f"{value_float:,.2f}"
+0071:         except (ValueError, TypeError):
+0072:             return "+0.00" if include_sign else "0.00"
+0073: 
+0074: class GreeksFormatter:
+0075:     """Handles formatting of option Greeks values."""
+0076:     
+0077:     @staticmethod
+0078:     def delta(value: float) -> str:
+0079:         """Format delta with appropriate precision."""
+0080:         return f"{value:.3f}"
+0081:     
+0082:     @staticmethod
+0083:     def gamma(value: float) -> str:
+0084:         """Format gamma with appropriate precision."""
+0085:         return f"{value:.4f}"
+0086:     
+0087:     @staticmethod
+0088:     def theta(value: float) -> str:
+0089:         """Format theta with appropriate precision."""
+0090:         return f"{value:.2f}"
+0091:     
+0092:     @staticmethod
+0093:     def vega(value: float) -> str:
+0094:         """Format vega with appropriate precision."""
+0095:         return f"{value:.2f}"
+0096:     
+0097:     @staticmethod
+0098:     def rho(value: float) -> str:
+0099:         """Format rho with appropriate precision."""
+0100:         return f"{value:.3f}"
+0101:     
+0102:     @staticmethod
+0103:     def format_all(greeks: Dict[str, float]) -> Dict[str, str]:
+0104:         """Format all Greeks in a dictionary."""
+0105:         formatters = {
+0106:             'delta': GreeksFormatter.delta,
+0107:             'gamma': GreeksFormatter.gamma,
+0108:             'theta': GreeksFormatter.theta,
+0109:             'vega': GreeksFormatter.vega,
+0110:             'rho': GreeksFormatter.rho
+0111:         }
+0112:         
+0113:         return {
+0114:             greek: formatters.get(greek.lower(), str)(value)
+0115:             for greek, value in greeks.items()
+0116:         }
+0117: 
+0118: class DateFormatter:
+0119:     """Handles formatting of dates and times."""
+0120:     
+0121:     @staticmethod
+0122:     def format_date(d: Union[datetime, date], format_str: str = "%Y-%m-%d") -> str:
+0123:         """Format a date with specified format string."""
+0124:         try:
+0125:             return d.strftime(format_str)
+0126:         except AttributeError:
+0127:             return ""
+0128:     
+0129:     @staticmethod
+0130:     def format_expiry(expiry: Union[datetime, date, float]) -> str:
+0131:         """
+0132:         Format option expiry date/time.
+0133:         
+0134:         Handles both datetime objects and year fractions. Provides human-readable
+0135:         relative time formats (e.g., "3d" for 3 days, "2w" for 2 weeks).
+0136:         
+0137:         Args:
+0138:             expiry: Either a datetime/date object or a year fraction (e.g., 0.5 for 6 months)
+0139:             
+0140:         Returns:
+0141:             Formatted expiry string in the most appropriate unit
+0142:         """
+0143:         if isinstance(expiry, (datetime, date)):
+0144:             return expiry.strftime("%Y-%m-%d")
+0145:         try:
+0146:             # Convert year fraction to days
+0147:             days = int(float(expiry) * 365)
+0148:             if days <= 0:
+0149:                 return "Expired"
+0150:             if days < 7:
+0151:                 return f"{days}d"
+0152:             if days < 30:
+0153:                 return f"{days//7}w"
+0154:             if days < 365:
+0155:                 return f"{days//30}m"
+0156:             return f"{days//365}y"
+0157:         except (ValueError, TypeError):
+0158:             return "Invalid"
+0159:     
+0160:     @staticmethod
+0161:     def timestamp_to_age(timestamp: Union[datetime, float]) -> str:
+0162:         """
+0163:         Convert a timestamp to a human-readable age string.
+0164:         
+0165:         This is useful for showing how long a position has been held or
+0166:         when a trade was executed.
+0167:         
+0168:         Args:
+0169:             timestamp: Either a datetime object or Unix timestamp
+0170:             
+0171:         Returns:
+0172:             Human-readable age string (e.g., "2h ago", "3d ago")
+0173:         """
+0174:         try:
+0175:             if isinstance(timestamp, float):
+0176:                 dt = datetime.fromtimestamp(timestamp)
+0177:             else:
+0178:                 dt = timestamp
+0179:             
+0180:             delta = datetime.now() - dt
+0181:             
+0182:             # Convert timedelta to the most appropriate unit
+0183:             seconds = delta.total_seconds()
+0184:             if seconds < 60:
+0185:                 return "just now"
+0186:             if seconds < 3600:
+0187:                 minutes = int(seconds / 60)
+0188:                 return f"{minutes}m ago"
+0189:             if seconds < 86400:
+0190:                 hours = int(seconds / 3600)
+0191:                 return f"{hours}h ago"
+0192:             if seconds < 604800:
+0193:                 days = int(seconds / 86400)
+0194:                 return f"{days}d ago"
+0195:             if seconds < 2592000:
+0196:                 weeks = int(seconds / 604800)
+0197:                 return f"{weeks}w ago"
+0198:             if seconds < 31536000:
+0199:                 months = int(seconds / 2592000)
+0200:                 return f"{months}mo ago"
+0201:             years = int(seconds / 31536000)
+0202:             return f"{years}y ago"
+0203:         except (ValueError, TypeError, AttributeError):
+0204:             return "unknown"
+0205: 
+0206: class PortfolioFormatter:
+0207:     """
+0208:     Handles formatting of portfolio and position data with consistent styling.
+0209:     
+0210:     This class ensures that portfolio data is presented in a clear, consistent
+0211:     manner across the application, making it easier for users to understand
+0212:     their positions and risk exposure.
+0213:     """
+0214:     
+0215:     @staticmethod
+0216:     def format_position(position: Dict[str, Any]) -> Dict[str, str]:
+0217:         """
+0218:         Format a complete position entry with all relevant fields.
+0219:         
+0220:         This method provides consistent formatting for all position attributes,
+0221:         ensuring that values are presented with appropriate precision and units.
+0222:         
+0223:         Args:
+0224:             position: Dictionary containing position details
+0225:             
+0226:         Returns:
+0227:             Dictionary with formatted position values
+0228:         """
+0229:         fin = FinancialFormatter()
+0230:         greeks = GreeksFormatter()
+0231:         dates = DateFormatter()
+0232:         
+0233:         # Create formatted position dictionary with proper precision and units
+0234:         formatted = {
+0235:             "type": position.get("option_type", "").upper(),
+0236:             "strike": fin.currency(position.get("strike", 0)),
+0237:             "expiry": dates.format_expiry(position.get("expiry", 0)),
+0238:             "quantity": str(position.get("quantity", 0)),
+0239:             "underlying": fin.currency(position.get("underlying_price", 0)),
+0240:             "premium": fin.currency(position.get("premium", 0)),
+0241:             "market_value": fin.currency(position.get("market_value", 0)),
+0242:             "unrealized_pnl": fin.delta_value(position.get("unrealized_pnl", 0)),
+0243:             "implied_vol": fin.percentage(position.get("volatility", 0)),
+0244:             "days_held": dates.timestamp_to_age(position.get("entry_date", datetime.now()))
+0245:         }
+0246:         
+0247:         # Add formatted Greeks if present
+0248:         if "greeks" in position:
+0249:             formatted.update(greeks.format_all(position["greeks"]))
+0250:         
+0251:         return formatted
+0252:     
+0253:     @staticmethod
+0254:     def format_summary(summary: Dict[str, Any]) -> Dict[str, str]:
+0255:         """
+0256:         Format portfolio summary statistics.
+0257:         
+0258:         Provides consistent formatting for portfolio-level metrics,
+0259:         making it easy to display summary information in the UI.
+0260:         
+0261:         Args:
+0262:             summary: Dictionary containing portfolio summary data
+0263:             
+0264:         Returns:
+0265:             Dictionary with formatted summary values
+0266:         """
+0267:         fin = FinancialFormatter()
+0268:         
+0269:         return {
+0270:             "total_value": fin.currency(summary.get("total_value", 0)),
+0271:             "daily_pnl": fin.delta_value(summary.get("daily_pnl", 0)),
+0272:             "total_pnl": fin.delta_value(summary.get("total_pnl", 0)),
+0273:             "daily_return": fin.percentage(summary.get("daily_return", 0)),
+0274:             "total_return": fin.percentage(summary.get("total_return", 0)),
+0275:             "realized_pnl": fin.delta_value(summary.get("realized_pnl", 0)),
+0276:             "unrealized_pnl": fin.delta_value(summary.get("unrealized_pnl", 0)),
+0277:             "margin_used": fin.currency(summary.get("margin_used", 0)),
+0278:             "buying_power": fin.currency(summary.get("buying_power", 0))
+0279:         }
+0280: 
+0281: class StatisticalFormatter:
+0282:     """
+0283:     Handles formatting of statistical metrics and analysis results.
+0284:     
+0285:     This class provides consistent formatting for various statistical measures
+0286:     used in portfolio analysis and risk management.
+0287:     """
+0288:     
+0289:     @staticmethod
+0290:     def format_distribution_stats(stats: Dict[str, float]) -> Dict[str, str]:
+0291:         """
+0292:         Format statistical distribution metrics.
+0293:         
+0294:         Provides appropriate formatting for measures like mean, standard
+0295:         deviation, skewness, and kurtosis.
+0296:         
+0297:         Args:
+0298:             stats: Dictionary of statistical measures
+0299:             
+0300:         Returns:
+0301:             Dictionary with formatted statistical values
+0302:         """
+0303:         fin = FinancialFormatter()
+0304:         
+0305:         return {
+0306:             "mean": fin.number(stats.get("mean", 0), decimals=3),
+0307:             "median": fin.number(stats.get("median", 0), decimals=3),
+0308:             "std_dev": fin.number(stats.get("std_dev", 0), decimals=3),
+0309:             "skewness": fin.number(stats.get("skewness", 0), decimals=3),
+0310:             "kurtosis": fin.number(stats.get("kurtosis", 0), decimals=3),
+0311:             "sharpe": fin.number(stats.get("sharpe", 0), decimals=2),
+0312:             "sortino": fin.number(stats.get("sortino", 0), decimals=2),
+0313:             "max_drawdown": fin.percentage(stats.get("max_drawdown", 0)),
+0314:             "var_95": fin.currency(stats.get("var_95", 0)),
+0315:             "cvar_95": fin.currency(stats.get("cvar_95", 0))
+0316:         }
+0317:     
+0318:     @staticmethod
+0319:     def format_correlation(value: float) -> str:
+0320:         """
+0321:         Format correlation coefficients with appropriate precision.
+0322:         
+0323:         Args:
+0324:             value: Correlation coefficient (-1 to 1)
+0325:             
+0326:         Returns:
+0327:             Formatted correlation string with color indicator
+0328:         """
+0329:         try:
+0330:             value_float = float(value)
+0331:             # Clamp value to valid range
+0332:             value_float = max(-1.0, min(1.0, value_float))
+0333:             return f"{value_float:+.2f}"
+0334:         except (ValueError, TypeError):
+0335:             return "0.00"
+0336: 
+0337: def format_table_value(value: Any, format_type: str = "default") -> str:
+0338:     """
+0339:     Generic formatter for table cell values.
+0340:     
+0341:     This utility function provides consistent formatting for values
+0342:     displayed in tables throughout the application.
+0343:     
+0344:     Args:
+0345:         value: The value to format
+0346:         format_type: Type of formatting to apply
+0347:         
+0348:     Returns:
+0349:         Formatted string ready for display
+0350:     """
+0351:     fin = FinancialFormatter()
+0352:     
+0353:     # Handle None/null values
+0354:     if value is None:
+0355:         return "-"
+0356:     
+0357:     # Apply formatting based on type
+0358:     format_map = {
+0359:         "currency": lambda x: fin.currency(float(x)),
+0360:         "percentage": lambda x: fin.percentage(float(x)),
+0361:         "number": lambda x: fin.number(float(x)),
+0362:         "delta": lambda x: fin.delta_value(float(x)),
+0363:         "date": lambda x: DateFormatter.format_date(x),
+0364:         "expiry": lambda x: DateFormatter.format_expiry(x),
+0365:         "age": lambda x: DateFormatter.timestamp_to_age(x)
+0366:     }
+0367:     
+0368:     try:
+0369:         if format_type in format_map:
+0370:             return format_map[format_type](value)
+0371:         return str(value)
+0372:     except (ValueError, TypeError):
+0373:         return "-"
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\market_data.py
 // ----------------------------------------
+0001: """
+0002: Market data handling and processing utilities.
+0003: 
+0004: This module provides robust functionality for:
+0005: 1. Fetching market data from various sources
+0006: 2. Rate limiting and error handling
+0007: 3. Data normalization and validation
+0008: 4. Caching and persistence
+0009: 5. Real-time data handling
+0010: """
+0011: 
+0012: import asyncio
+0013: import aiohttp
+0014: import yfinance as yf
+0015: import pandas as pd
+0016: import numpy as np
+0017: from datetime import datetime, timedelta
+0018: from typing import Dict, List, Optional, Union, Any
+0019: import logging
+0020: from pathlib import Path
+0021: import json
+0022: from dataclasses import dataclass
+0023: import time
+0024: import threading
+0025: from concurrent.futures import ThreadPoolExecutor
+0026: from ..utils.cache import Cache, cached
+0027: from ..config import AppConfig
+0028: 
+0029: logger = logging.getLogger(__name__)
+0030: 
+0031: @dataclass
+0032: class MarketQuote:
+0033:     """Container for market data quotes."""
+0034:     symbol: str
+0035:     timestamp: datetime
+0036:     bid: float
+0037:     ask: float
+0038:     last: float
+0039:     volume: int
+0040:     source: str
+0041:     
+0042:     @property
+0043:     def mid(self) -> float:
+0044:         """Calculate mid-point price."""
+0045:         return (self.bid + self.ask) / 2 if self.bid and self.ask else self.last
+0046:     
+0047:     @property
+0048:     def spread(self) -> float:
+0049:         """Calculate bid-ask spread."""
+0050:         return self.ask - self.bid if self.bid and self.ask else 0.0
+0051: 
+0052: @dataclass
+0053: class OptionQuote(MarketQuote):
+0054:     """Extended quote data for options."""
+0055:     strike: float
+0056:     expiry: datetime
+0057:     option_type: str
+0058:     underlying_price: float
+0059:     implied_volatility: float
+0060:     open_interest: int
+0061:     delta: Optional[float] = None
+0062:     gamma: Optional[float] = None
+0063:     theta: Optional[float] = None
+0064:     vega: Optional[float] = None
+0065:     rho: Optional[float] = None
+0066: 
+0067: class RateLimiter:
+0068:     """
+0069:     Thread-safe rate limiter for API calls.
+0070:     
+0071:     This ensures we don't exceed API rate limits by implementing
+0072:     token bucket algorithm with configurable rates.
+0073:     """
+0074:     
+0075:     def __init__(self, max_requests: int, time_window: float):
+0076:         """
+0077:         Initialize rate limiter.
+0078:         
+0079:         Args:
+0080:             max_requests: Maximum requests allowed in time window
+0081:             time_window: Time window in seconds
+0082:         """
+0083:         self.max_requests = max_requests
+0084:         self.time_window = time_window
+0085:         self.tokens = max_requests
+0086:         self.last_update = time.monotonic()
+0087:         self._lock = threading.Lock()
+0088:     
+0089:     def acquire(self, tokens: int = 1) -> bool:
+0090:         """
+0091:         Attempt to acquire rate limit tokens.
+0092:         
+0093:         Args:
+0094:             tokens: Number of tokens to acquire
+0095:             
+0096:         Returns:
+0097:             True if tokens were acquired, False if would exceed rate limit
+0098:         """
+0099:         with self._lock:
+0100:             now = time.monotonic()
+0101:             time_passed = now - self.last_update
+0102:             
+0103:             # Replenish tokens based on time passed
+0104:             self.tokens = min(
+0105:                 self.max_requests,
+0106:                 self.tokens + time_passed * (self.max_requests / self.time_window)
+0107:             )
+0108:             self.last_update = now
+0109:             
+0110:             if self.tokens >= tokens:
+0111:                 self.tokens -= tokens
+0112:                 return True
+0113:             return False
+0114:     
+0115:     async def acquire_async(self, tokens: int = 1) -> None:
+0116:         """
+0117:         Asynchronously acquire rate limit tokens.
+0118:         
+0119:         This will wait until tokens become available.
+0120:         """
+0121:         while not self.acquire(tokens):
+0122:             await asyncio.sleep(0.1)
+0123: 
+0124: class MarketDataClient:
+0125:     """
+0126:     Client for fetching market data from multiple sources.
+0127:     
+0128:     Features:
+0129:     - Multiple data source support
+0130:     - Automatic failover
+0131:     - Rate limiting
+0132:     - Caching
+0133:     - Async batch operations
+0134:     """
+0135:     
+0136:     def __init__(self, config: AppConfig):
+0137:         """
+0138:         Initialize market data client.
+0139:         
+0140:         Args:
+0141:             config: Application configuration
+0142:         """
+0143:         self.config = config
+0144:         self.cache = Cache(
+0145:             max_size=1000,
+0146:             default_ttl=timedelta(minutes=15),
+0147:             disk_path=Path("cache/market_data")
+0148:         )
+0149:         
+0150:         # Initialize rate limiters for different APIs
+0151:         self.rate_limiters = {
+0152:             "yahoo": RateLimiter(max_requests=2000, time_window=3600),  # 2000/hour
+0153:             "alpha_vantage": RateLimiter(max_requests=5, time_window=60),  # 5/minute
+0154:             "iex": RateLimiter(max_requests=100, time_window=60)  # 100/minute
+0155:         }
+0156:         
+0157:         # Initialize async session
+0158:         self._session = None
+0159:         self._session_lock = threading.Lock()
+0160:         self._executor = ThreadPoolExecutor(max_workers=4)
+0161:     
+0162:     async def _get_session(self) -> aiohttp.ClientSession:
+0163:         """Get or create aiohttp session."""
+0164:         if self._session is None:
+0165:             async with self._session_lock:
+0166:                 if self._session is None:
+0167:                     self._session = aiohttp.ClientSession()
+0168:         return self._session
+0169:     
+0170:     async def close(self):
+0171:         """Close client and cleanup resources."""
+0172:         if self._session:
+0173:             await self._session.close()
+0174:         self._executor.shutdown()
+0175:     
+0176:     async def get_quote(self, symbol: str, source: str = "yahoo") -> MarketQuote:
+0177:         """
+0178:         Fetch real-time quote for a symbol.
+0179:         
+0180:         Args:
+0181:             symbol: The ticker symbol
+0182:             source: Data source to use
+0183:             
+0184:         Returns:
+0185:             MarketQuote object containing latest price data
+0186:             
+0187:         Raises:
+0188:             MarketDataError: If quote cannot be fetched
+0189:         """
+0190:         cache_key = f"quote:{source}:{symbol}"
+0191:         cached_quote = self.cache.get(cache_key)
+0192:         if cached_quote:
+0193:             return cached_quote
+0194:         
+0195:         try:
+0196:             if source == "yahoo":
+0197:                 await self.rate_limiters[source].acquire_async()
+0198:                 quote = await self._fetch_yahoo_quote(symbol)
+0199:             elif source == "alpha_vantage":
+0200:                 await self.rate_limiters[source].acquire_async()
+0201:                 quote = await self._fetch_alpha_vantage_quote(symbol)
+0202:             else:
+0203:                 raise ValueError(f"Unsupported data source: {source}")
+0204:             
+0205:             self.cache.set(cache_key, quote, ttl=timedelta(seconds=30))
+0206:             return quote
+0207:         
+0208:         except Exception as e:
+0209:             logger.error(f"Failed to fetch quote for {symbol} from {source}: {str(e)}")
+0210:             raise MarketDataError(f"Quote fetch failed: {str(e)}")
+0211:     
+0212:     async def get_option_chain(self, symbol: str) -> Dict[str, List[OptionQuote]]:
+0213:         """
+0214:         Fetch complete option chain for a symbol.
+0215:         
+0216:         Returns a dictionary mapping expiration dates to lists of option quotes.
+0217:         Includes both calls and puts.
+0218:         
+0219:         Args:
+0220:             symbol: The underlying symbol
+0221:             
+0222:         Returns:
+0223:             Dictionary mapping expiry dates to lists of option quotes
+0224:         """
+0225:         cache_key = f"options:{symbol}"
+0226:         cached_chain = self.cache.get(cache_key)
+0227:         if cached_chain:
+0228:             return cached_chain
+0229:         
+0230:         try:
+0231:             # Fetch using yfinance in thread pool to avoid blocking
+0232:             def fetch_chain():
+0233:                 ticker = yf.Ticker(symbol)
+0234:                 expirations = ticker.options
+0235:                 
+0236:                 chain = {}
+0237:                 for expiry in expirations:
+0238:                     opts = ticker.option_chain(expiry)
+0239:                     chain[expiry] = []
+0240:                     
+0241:                     # Process calls
+0242:                     for _, row in opts.calls.iterrows():
+0243:                         chain[expiry].append(OptionQuote(
+0244:                             symbol=symbol,
+0245:                             timestamp=datetime.now(),
+0246:                             bid=row.bid,
+0247:                             ask=row.ask,
+0248:                             last=row.lastPrice,
+0249:                             volume=row.volume,
+0250:                             source="yahoo",
+0251:                             strike=row.strike,
+0252:                             expiry=datetime.strptime(expiry, "%Y-%m-%d"),
+0253:                             option_type="call",
+0254:                             underlying_price=ticker.info['regularMarketPrice'],
+0255:                             implied_volatility=row.impliedVolatility,
+0256:                             open_interest=row.openInterest,
+0257:                             delta=row.get('delta'),
+0258:                             gamma=row.get('gamma'),
+0259:                             theta=row.get('theta'),
+0260:                             vega=row.get('vega'),
+0261:                             rho=row.get('rho')
+0262:                         ))
+0263:                     
+0264:                     # Process puts
+0265:                     for _, row in opts.puts.iterrows():
+0266:                         chain[expiry].append(OptionQuote(
+0267:                             symbol=symbol,
+0268:                             timestamp=datetime.now(),
+0269:                             bid=row.bid,
+0270:                             ask=row.ask,
+0271:                             last=row.lastPrice,
+0272:                             volume=row.volume,
+0273:                             source="yahoo",
+0274:                             strike=row.strike,
+0275:                             expiry=datetime.strptime(expiry, "%Y-%m-%d"),
+0276:                             option_type="put",
+0277:                             underlying_price=ticker.info['regularMarketPrice'],
+0278:                             implied_volatility=row.impliedVolatility,
+0279:                             open_interest=row.openInterest,
+0280:                             delta=row.get('delta'),
+0281:                             gamma=row.get('gamma'),
+0282:                             theta=row.get('theta'),
+0283:                             vega=row.get('vega'),
+0284:                             rho=row.get('rho')
+0285:                         ))
+0286:                 
+0287:                 return chain
+0288:             
+0289:             # Execute in thread pool
+0290:             loop = asyncio.get_event_loop()
+0291:             chain = await loop.run_in_executor(self._executor, fetch_chain)
+0292:             
+0293:             # Cache for 5 minutes
+0294:             self.cache.set(cache_key, chain, ttl=timedelta(minutes=5))
+0295:             return chain
+0296:             
+0297:         except Exception as e:
+0298:             logger.error(f"Failed to fetch option chain for {symbol}: {str(e)}")
+0299:             raise MarketDataError(f"Option chain fetch failed: {str(e)}")
+0300:     
+0301:     async def get_historical_data(self, symbol: str, start_date: datetime,
+0302:                                 end_date: datetime, interval: str = "1d") -> pd.DataFrame:
+0303:         """
+0304:         Fetch historical price data for a symbol.
+0305:         
+0306:         Args:
+0307:             symbol: The ticker symbol
+0308:             start_date: Start date for historical data
+0309:             end_date: End date for historical data
+0310:             interval: Data interval (1d, 1h, etc.)
+0311:             
+0312:         Returns:
+0313:             DataFrame containing historical price data
+0314:         """
+0315:         cache_key = f"history:{symbol}:{start_date}:{end_date}:{interval}"
+0316:         cached_data = self.cache.get(cache_key)
+0317:         if cached_data is not None:
+0318:             return cached_data
+0319:         
+0320:         try:
+0321:             def fetch_history():
+0322:                 ticker = yf.Ticker(symbol)
+0323:                 df = ticker.history(
+0324:                     start=start_date,
+0325:                     end=end_date,
+0326:                     interval=interval
+0327:                 )
+0328:                 return df
+0329:             
+0330:             # Execute in thread pool
+0331:             loop = asyncio.get_event_loop()
+0332:             data = await loop.run_in_executor(self._executor, fetch_history)
+0333:             
+0334:             # Cache for 1 hour if historical data
+0335:             if interval != "1m":
+0336:                 self.cache.set(cache_key, data, ttl=timedelta(hours=1))
+0337:             
+0338:             return data
+0339:             
+0340:         except Exception as e:
+0341:             logger.error(f"Failed to fetch historical data for {symbol}: {str(e)}")
+0342:             raise MarketDataError(f"Historical data fetch failed: {str(e)}")
+0343:     
+0344:     async def _fetch_yahoo_quote(self, symbol: str) -> MarketQuote:
+0345:         """Internal method to fetch quote from Yahoo Finance."""
+0346:         async with self._get_session() as session:
+0347:             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+0348:             async with session.get(url) as response:
+0349:                 data = await response.json()
+0350:                 
+0351:                 meta = data['chart']['result'][0]['meta']
+0352:                 return MarketQuote(
+0353:                     symbol=symbol,
+0354:                     timestamp=datetime.fromtimestamp(meta['regularMarketTime']),
+0355:                     bid=meta.get('bid', 0.0),
+0356:                     ask=meta.get('ask', 0.0),
+0357:                     last=meta['regularMarketPrice'],
+0358:                     volume=meta['regularMarketVolume'],
+0359:                     source="yahoo"
+0360:                 )
+0361:     
+0362:     async def _fetch_alpha_vantage_quote(self, symbol: str) -> MarketQuote:
+0363:         """Internal method to fetch quote from Alpha Vantage."""
+0364:         api_key = self.config.get("alpha_vantage_api_key")
+0365:         if not api_key:
+0366:             raise ValueError("Alpha Vantage API key not configured")
+0367:         
+0368:         async with self._get_session() as session:
+0369:             url = f"https://www.alphavantage.co/query"
+0370:             params = {
+0371:                 "function": "GLOBAL_QUOTE",
+0372:                 "symbol": symbol,
+0373:                 "apikey": api_key
+0374:             }
+0375:             
+0376:             async with session.get(url, params=params) as response:
+0377:                 data = await response.json()
+0378:                 quote = data['Global Quote']
+0379:                 
+0380:                 return MarketQuote(
+0381:                     symbol=symbol,
+0382:                     timestamp=datetime.now(),  # AV doesn't provide timestamp
+0383:                     bid=float(quote.get('09. price', 0.0)),  # No bid/ask provided
+0384:                     ask=float(quote.get('09. price', 0.0)),
+0385:                     last=float(quote['05. price']),
+0386:                     volume=int(quote['06. volume']),
+0387:                     source="alpha_vantage"
+0388:                 )
+0389: 
+0390: class MarketDataError(Exception):
+0391:     """Custom exception for market data related errors."""
+0392:     pass
+0393: 
+0394: class MarketDataStream:
+0395:     """
+0396:     Real-time market data streaming client.
+0397:     
+0398:     This class handles websocket connections for streaming real-time
+0399:     market data updates.
+0400:     """
+0401:     
+0402:     def __init__(self, symbols: List[str], callback: callable):
+0403:         """
+0404:         Initialize streaming client.
+0405:         
+0406:         Args:
+0407:             symbols: List of symbols to stream
+0408:             callback: Callback function for data updates
+0409:         """
+0410:         self.symbols = symbols
+0411:         self.callback = callback
+0412:         self._ws = None
+0413:         self._running = False
+0414:         self._reconnect_delay = 1.0  # Initial reconnect delay
+0415:         self._max_reconnect_delay = 60.0
+0416:     
+0417:     async def start(self):
+0418:         """Start streaming market data."""
+0419:         self._running = True
+0420:         while self._running:
+0421:             try:
+0422:                 await self._connect()
+0423:                 await self._stream()
+0424:             except Exception as e:
+0425:                 logger.error(f"Streaming error: {str(e)}")
+0426:                 if self._running:
+0427:                     await asyncio.sleep(self._reconnect_delay)
+0428:                     self._reconnect_delay = min(
+0429:                         self._reconnect_delay * 2,
+0430:                         self._max_reconnect_delay
+0431:                     )
+0432:     
+0433:     async def stop(self):
+0434:         """Stop streaming market data."""
+0435:         self._running = False
+0436:         if self._ws:
+0437:             await self._ws.close()
+0438:     
+0439:     async def _connect(self):
+0440:         """Establish websocket connection."""
+0441:         session = aiohttp.ClientSession()
+0442:         self._ws = await session.ws_connect(
+0443:             'wss://streamer.finance.yahoo.com',
+0444:             heartbeat=30
+0445:         )
+0446:         
+0447:         # Subscribe to symbols
+0448:         subscribe_msg = {
+0449:             "subscribe": self.symbols
+0450:         }
+0451:         await self._ws.send_json(subscribe_msg)
+0452:         self._reconnect_delay = 1.0  # Reset reconnect delay on successful connection
+0453:     
+0454:     async def _stream(self):
+0455:         """Handle streaming data."""
+0456:         async for msg in self._ws:
+0457:             if msg.type == aiohttp.WSMsgType.TEXT:
+0458:                 data = json.loads(msg.data)
+0459:                 await self.callback(data)
+0460:             elif msg.type == aiohttp.WSMsgType.CLOSED:
+0461:                 break
+0462:             elif msg.type == aiohttp.WSMsgType.ERROR:
+0463:                 break
+0464: 
+0465: def format_market_data(quotes: Union[MarketQuote, List[MarketQuote]]) -> pd.DataFrame:
+0466:     """
+0467:     Format market data quotes into a pandas DataFrame.
+0468:     
+0469:     Args:
+0470:         quotes: Single quote or list of quotes
+0471:         
+0472:     Returns:
+0473:         DataFrame containing formatted market data
+0474:     """
+0475:     if isinstance(quotes, MarketQuote):
+0476:         quotes = [quotes]
+0477:     
+0478:     data = []
+0479:     for quote in quotes:
+0480:         row = {
+0481:             'symbol': quote.symbol,
+0482:             'timestamp': quote.timestamp,
+0483:             'bid': quote.bid,
+0484:             'ask': quote.ask,
+0485:             'last': quote.last,
+0486:             'mid': quote.mid,
+0487:             'spread': quote.spread,
+0488:             'volume': quote.volume,
+0489:             'source': quote.source
+0490:         }
+0491:         
+0492:         # Add option-specific fields if available
+0493:         if isinstance(quote, OptionQuote):
+0494:             row.update({
+0495:                 'strike': quote.strike,
+0496:                 'expiry': quote.expiry,
+0497:                 'option_type': quote.option_type,
+0498:                 'underlying_price': quote.underlying_price,
+0499:                 'implied_volatility': quote.implied_volatility,
+0500:                 'open_interest': quote.open_interest,
+0501:                 'delta': quote.delta,
+0502:                 'gamma': quote.gamma,
+0503:                 'theta': quote.theta,
+0504:                 'vega': quote.vega,
+0505:                 'rho': quote.rho
+0506:             })
+0507:         
+0508:         data.append(row)
+0509:     
+0510:     return pd.DataFrame(data)
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\validators.py
 // ----------------------------------------
+0001: """
+0002: Input validation and business rule checking utilities.
+0003: 
+0004: This module provides:
+0005: 1. Type validation and conversion
+0006: 2. Business rule validation
+0007: 3. Data format validation
+0008: 4. Portfolio consistency checks
+0009: 5. Custom validation decorators
+0010: """
+0011: 
+0012: import re
+0013: from datetime import datetime, date
+0014: from typing import Any, Dict, List, Optional, Union, Callable
+0015: from decimal import Decimal
+0016: from functools import wraps
+0017: import pandas as pd
+0018: import numpy as np
+0019: 
+0020: class ValidationError(Exception):
+0021:     """Custom exception for validation errors."""
+0022:     pass
+0023: 
+0024: def validate_type(value: Any, expected_type: Union[type, tuple], 
+0025:                  field_name: str) -> None:
+0026:     """
+0027:     Validate that a value is of the expected type.
+0028:     
+0029:     Args:
+0030:         value: Value to validate
+0031:         expected_type: Expected type or tuple of types
+0032:         field_name: Name of field for error messages
+0033:         
+0034:     Raises:
+0035:         ValidationError: If validation fails
+0036:     """
+0037:     if not isinstance(value, expected_type):
+0038:         raise ValidationError(
+0039:             f"{field_name} must be of type {expected_type.__name__}, "
+0040:             f"got {type(value).__name__}"
+0041:         )
+0042: 
+0043: def validate_numeric(value: Any, field_name: str,
+0044:                     min_value: Optional[float] = None,
+0045:                     max_value: Optional[float] = None,
+0046:                     allow_zero: bool = True,
+0047:                     allow_negative: bool = False) -> float:
+0048:     """
+0049:     Validate and convert numeric input.
+0050:     
+0051:     Args:
+0052:         value: Value to validate
+0053:         field_name: Field name for error messages
+0054:         min_value: Optional minimum value
+0055:         max_value: Optional maximum value
+0056:         allow_zero: Whether to allow zero
+0057:         allow_negative: Whether to allow negative values
+0058:         
+0059:     Returns:
+0060:         Validated float value
+0061:         
+0062:     Raises:
+0063:         ValidationError: If validation fails
+0064:     """
+0065:     try:
+0066:         if isinstance(value, str):
+0067:             # Remove any currency symbols or commas
+0068:             value = value.replace(', ').replace(',', '').strip()
+0069:         
+0070:         # Convert to float
+0071:         num_value = float(value)
+0072:         
+0073:         # Validate constraints
+0074:         if not allow_zero and num_value == 0:
+0075:             raise ValidationError(f"{field_name} cannot be zero")
+0076:         
+0077:         if not allow_negative and num_value < 0:
+0078:             raise ValidationError(f"{field_name} cannot be negative")
+0079:         
+0080:         if min_value is not None and num_value < min_value:
+0081:             raise ValidationError(
+0082:                 f"{field_name} must be greater than or equal to {min_value}"
+0083:             )
+0084:         
+0085:         if max_value is not None and num_value > max_value:
+0086:             raise ValidationError(
+0087:                 f"{field_name} must be less than or equal to {max_value}"
+0088:             )
+0089:         
+0090:         return num_value
+0091:     
+0092:     except (TypeError, ValueError) as e:
+0093:         raise ValidationError(f"{field_name} must be a valid number")
+0094: 
+0095: def validate_date(value: Any, field_name: str,
+0096:                  min_date: Optional[date] = None,
+0097:                  max_date: Optional[date] = None) -> date:
+0098:     """
+0099:     Validate and convert date input.
+0100:     
+0101:     Args:
+0102:         value: Date value to validate (string, datetime, or date)
+0103:         field_name: Field name for error messages
+0104:         min_date: Optional minimum allowed date
+0105:         max_date: Optional maximum allowed date
+0106:         
+0107:     Returns:
+0108:         Validated date object
+0109:     """
+0110:     try:
+0111:         if isinstance(value, datetime):
+0112:             dt = value.date()
+0113:         elif isinstance(value, date):
+0114:             dt = value
+0115:         elif isinstance(value, str):
+0116:             # Try common date formats
+0117:             for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y%m%d'):
+0118:                 try:
+0119:                     dt = datetime.strptime(value, fmt).date()
+0120:                     break
+0121:                 except ValueError:
+0122:                     continue
+0123:             else:
+0124:                 raise ValidationError(f"{field_name} is not in a recognized date format")
+0125:         else:
+0126:             raise ValidationError(f"{field_name} must be a valid date")
+0127:         
+0128:         # Validate range
+0129:         if min_date and dt < min_date:
+0130:             raise ValidationError(
+0131:                 f"{field_name} must be on or after {min_date.strftime('%Y-%m-%d')}"
+0132:             )
+0133:         
+0134:         if max_date and dt > max_date:
+0135:             raise ValidationError(
+0136:                 f"{field_name} must be on or before {max_date.strftime('%Y-%m-%d')}"
+0137:             )
+0138:         
+0139:         return dt
+0140:     
+0141:     except (TypeError, ValueError) as e:
+0142:         raise ValidationError(f"{field_name} must be a valid date")
+0143: 
+0144: def validate_option_parameters(func: Callable) -> Callable:
+0145:     """
+0146:     Decorator to validate option pricing parameters.
+0147:     
+0148:     Validates:
+0149:     - Strike price > 0
+0150:     - Time to expiry >= 0
+0151:     - Volatility > 0
+0152:     - Interest rate is reasonable
+0153:     """
+0154:     @wraps(func)
+0155:     def wrapper(*args, **kwargs):
+0156:         # Extract parameters from args/kwargs
+0157:         params = {}
+0158:         sig = inspect.signature(func)
+0159:         bound_args = sig.bind(*args, **kwargs)
+0160:         bound_args.apply_defaults()
+0161:         params.update(bound_args.arguments)
+0162:         
+0163:         # Validate strike price
+0164:         validate_numeric(
+0165:             params.get('strike', 0),
+0166:             'Strike price',
+0167:             min_value=0.01,
+0168:             allow_zero=False
+0169:         )
+0170:         
+0171:         # Validate time to expiry
+0172:         validate_numeric(
+0173:             params.get('time_to_expiry', 0),
+0174:             'Time to expiry',
+0175:             min_value=0,
+0176:             allow_negative=False
+0177:         )
+0178:         
+0179:         # Validate volatility
+0180:         validate_numeric(
+0181:             params.get('volatility', 0),
+0182:             'Volatility',
+0183:             min_value=0.0001,
+0184:             max_value=5.0,
+0185:             allow_zero=False
+0186:         )
+0187:         
+0188:         # Validate interest rate
+0189:         validate_numeric(
+0190:             params.get('interest_rate', 0),
+0191:             'Interest rate',
+0192:             min_value=-0.1,
+0193:             max_value=0.5
+0194:         )
+0195:         
+0196:         return func(*args, **kwargs)
+0197:     
+0198:     return wrapper
+0199: 
+0200: def validate_portfolio_position(position: Dict[str, Any]) -> None:
+0201:     """
+0202:     Validate a portfolio position entry.
+0203:     
+0204:     Checks:
+0205:     - Required fields are present
+0206:     - Field types are correct
+0207:     - Values are within valid ranges
+0208:     - Option parameters are consistent
+0209:     """
+0210:     required_fields = {
+0211:         'symbol': str,
+0212:         'quantity': int,
+0213:         'position_type': str,
+0214:         'strike': float,
+0215:         'expiry': (date, datetime),
+0216:         'option_type': str
+0217:     }
+0218:     
+0219:     # Check required fields
+0220:     for field, field_type in required_fields.items():
+0221:         if field not in position:
+0222:             raise ValidationError(f"Missing required field: {field}")
+0223:         validate_type(position[field], field_type, field)
+0224:     
+0225:     # Validate quantity
+0226:     validate_numeric(
+0227:         position['quantity'],
+0228:         'Quantity',
+0229:         allow_zero=False
+0230:     )
+0231:     
+0232:     # Validate strike price
+0233:     validate_numeric(
+0234:         position['strike'],
+0235:         'Strike price',
+0236:         min_value=0.01,
+0237:         allow_zero=False
+0238:     )
+0239:     
+0240:     # Validate option type
+0241:     if position['option_type'].lower() not in ('call', 'put'):
+0242:         raise ValidationError("Option type must be either 'call' or 'put'")
+0243:     
+0244:     # Validate expiry is in the future
+0245:     expiry = position['expiry']
+0246:     if isinstance(expiry, datetime):
+0247:         expiry = expiry.date()
+0248:     if expiry < date.today():
+0249:         raise ValidationError("Option expiry cannot be in the past")
+0250: 
+0251: def validate_portfolio_margin(positions: List[Dict[str, Any]],
+0252:                            account_value: float) -> None:
+0253:     """
+0254:     Validate portfolio margin requirements.
+0255:     
+0256:     Checks:
+0257:     - Portfolio total exposure within limits
+0258:     - Individual position sizes appropriate
+0259:     - Margin requirements are met
+0260:     - Risk metrics within acceptable ranges
+0261:     """
+0262:     # Calculate total exposure
+0263:     total_exposure = sum(
+0264:         abs(pos['quantity'] * pos['strike'])
+0265:         for pos in positions
+0266:     )
+0267:     
+0268:     # Check against account value
+0269:     max_exposure = account_value * 5  # Example: 5x leverage limit
+0270:     if total_exposure > max_exposure:
+0271:         raise ValidationError(
+0272:             f"Total exposure ({total_exposure}) exceeds maximum allowed "
+0273:             f"({max_exposure}) for account size"
+0274:         )
+0275:     
+0276:     # Check individual position sizes
+0277:     for position in positions:
+0278:         position_exposure = abs(position['quantity'] * position['strike'])
+0279:         if position_exposure > account_value:
+0280:             raise ValidationError(
+0281:                 f"Individual position exposure ({position_exposure}) "
+0282:                 f"exceeds account value"
+0283:             )
+0284:     
+0285:     # Additional margin checks could be added here
+0286:     # This is a simplified example
+0287: 
+0288: def validate_data_format(df: pd.DataFrame, 
+0289:                         expected_columns: List[str],
+0290:                         column_types: Optional[Dict[str, type]] = None) -> None:
+0291:     """
+0292:     Validate DataFrame format and content.
+0293:     
+0294:     Args:
+0295:         df: DataFrame to validate
+0296:         expected_columns: List of required columns
+0297:         column_types: Optional mapping of column names to expected types
+0298:     """
+0299:     # Check for required columns
+0300:     missing_cols = set(expected_columns) - set(df.columns)
+0301:     if missing_cols:
+0302:         raise ValidationError(f"Missing required columns: {missing_cols}")
+0303:     
+0304:     # Validate column types if specified
+0305:     if column_types:
+0306:         for col, expected_type in column_types.items():
+0307:             if col in df.columns:
+0308:                 # Check if column can be converted to expected type
+0309:                 try:
+0310:                     df[col].astype(expected_type)
+0311:                 except (ValueError, TypeError):
+0312:                     raise ValidationError(
+0313:                         f"Column '{col}' cannot be converted to {expected_type.__name__}"
+0314:                     )
+0315:     
+0316:     # Check for empty DataFrame
+0317:     if df.empty:
+0318:         raise ValidationError("DataFrame cannot be empty")
+0319:     
+0320:     # Check for missing values in required columns
+0321:     missing_values = df[expected_columns].isna().any()
+0322:     if missing_values.any():
+0323:         cols_with_missing = missing_values[missing_values].index.tolist()
+0324:         raise ValidationError(
+0325:             f"Missing values found in columns: {cols_with_missing}"
+0326:         )
+0327: 
+0328: def validate_csv_file(file_path: str,
+0329:                      expected_columns: List[str],
+0330:                      column_types: Optional[Dict[str, type]] = None) -> pd.DataFrame:
+0331:     """
+0332:     Validate a CSV file before processing.
+0333:     
+0334:     Args:
+0335:         file_path: Path to CSV file
+0336:         expected_columns: List of required columns
+0337:         column_types: Optional mapping of column names to expected types
+0338:         
+0339:     Returns:
+0340:         Validated DataFrame
+0341:     """
+0342:     try:
+0343:         # Try to read the CSV file
+0344:         df = pd.read_csv(file_path)
+0345:         
+0346:         # Validate format
+0347:         validate_data_format(df, expected_columns, column_types)
+0348:         
+0349:         # Additional CSV-specific checks
+0350:         if df.shape[0] > 1000000:  # Example limit
+0351:             raise ValidationError("CSV file too large (> 1M rows)")
+0352:         
+0353:         return df
+0354:         
+0355:     except pd.errors.EmptyDataError:
+0356:         raise ValidationError("CSV file is empty")
+0357:     except pd.errors.ParserError:
+0358:         raise ValidationError("Invalid CSV format")
+0359:     except FileNotFoundError:
+0360:         raise ValidationError("CSV file not found")
+0361:     except Exception as e:
+0362:         raise ValidationError(f"Error reading CSV file: {str(e)}")
+0363: 
+0364: class DataFrameValidator:
+0365:     """
+0366:     Validator class for DataFrame operations with custom rules.
+0367:     """
+0368:     
+0369:     def __init__(self, df: pd.DataFrame):
+0370:         self.df = df
+0371:         self.errors = []
+0372:     
+0373:     def validate_unique(self, columns: Union[str, List[str]]) -> 'DataFrameValidator':
+0374:         """Check if specified columns contain unique values."""
+0375:         if isinstance(columns, str):
+0376:             columns = [columns]
+0377:         
+0378:         for col in columns:
+0379:             if not self.df[col].is_unique:
+0380:                 self.errors.append(f"Column '{col}' contains duplicate values")
+0381:         
+0382:         return self
+0383:     
+0384:     def validate_range(self, column: str,
+0385:                       min_value: Optional[float] = None,
+0386:                       max_value: Optional[float] = None) -> 'DataFrameValidator':
+0387:         """Validate numeric values are within specified range."""
+0388:         values = self.df[column]
+0389:         
+0390:         if min_value is not None and values.min() < min_value:
+0391:             self.errors.append(
+0392:                 f"Column '{column}' contains values below minimum {min_value}"
+0393:             )
+0394:         
+0395:         if max_value is not None and values.max() > max_value:
+0396:             self.errors.append(
+0397:                 f"Column '{column}' contains values above maximum {max_value}"
+0398:             )
+0399:         
+0400:         return self
+0401:     
+0402:     def validate_regex(self, column: str, pattern: str) -> 'DataFrameValidator':
+0403:         """Validate string values match regex pattern."""
+0404:         invalid_values = self.df[~self.df[column].str.match(pattern)]
+0405:         if not invalid_values.empty:
+0406:             self.errors.append(
+0407:                 f"Column '{column}' contains values not matching pattern '{pattern}'"
+0408:             )
+0409:         
+0410:         return self
+0411:     
+0412:     def raise_if_invalid(self) -> None:
+0413:         """Raise ValidationError if any validations failed."""
+0414:         if self.errors:
+0415:             raise ValidationError("\n".join(self.errors))
+0416: 
+0417: def validate_parameters(func: Callable) -> Callable:
+0418:     """
+0419:     Generic parameter validation decorator.
+0420:     
+0421:     This decorator checks that function parameters meet specified criteria
+0422:     using type hints and optional validation rules.
+0423:     """
+0424:     @wraps(func)
+0425:     def wrapper(*args, **kwargs):
+0426:         sig = inspect.signature(func)
+0427:         bound_args = sig.bind(*args, **kwargs)
+0428:         bound_args.apply_defaults()
+0429:         
+0430:         # Get type hints
+0431:         hints = get_type_hints(func)
+0432:         
+0433:         # Validate each parameter
+0434:         for name, value in bound_args.arguments.items():
+0435:             if name in hints:
+0436:                 expected_type = hints[name]
+0437:                 
+0438:                 # Handle Optional types
+0439:                 if (
+0440:                     hasattr(expected_type, '__origin__') and
+0441:                     expected_type.__origin__ is Union and
+0442:                     type(None) in expected_type.__args__
+0443:                 ):
+0444:                     if value is not None:
+0445:                         expected_type = expected_type.__args__[0]
+0446:                     else:
+0447:                         continue
+0448:                 
+0449:                 # Validate type
+0450:                 validate_type(value, expected_type, name)
+0451:                 
+0452:                 # Additional validation based on parameter name
+0453:                 if 'price' in name.lower():
+0454:                     validate_numeric(value, name, min_value=0)
+0455:                 elif 'quantity' in name.lower():
+0456:                     validate_numeric(value, name, allow_zero=False)
+0457:                 elif 'date' in name.lower():
+0458:                     validate_date(value, name)
+0459:         
+0460:         return func(*args, **kwargs)
+0461:     
+0462:     return wrapper
 
 // ----------------------------------------
 // Total Python files found: 26

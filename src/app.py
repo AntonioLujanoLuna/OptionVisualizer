@@ -5,7 +5,6 @@ An advanced Streamlit application for option pricing visualization and analysis.
 Features:
 - Multiple pricing models (Black-Scholes, Binomial, Monte Carlo)
 - Interactive 2D and 3D visualizations
-- Real-time market data integration
 - Greeks analysis and visualization
 - Volatility surface exploration
 """
