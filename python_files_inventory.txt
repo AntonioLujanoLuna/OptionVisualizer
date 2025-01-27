@@ -1,4 +1,4 @@
-﻿// Python Files Concatenated on 01/27/2025 18:41:37
+﻿// Python Files Concatenated on 01/27/2025 19:09:25
 // ----------------------------------------
 
 
@@ -7,7 +7,7 @@
 // ----------------------------------------
 0001: # src/app.py
 0002: import streamlit as st
-0003: from src.ui.option_visualizer import OptionVisualizerApp
+0003: from .src.ui.option_visualizer import OptionVisualizerApp
 0004: 
 0005: def main():
 0006:     app = OptionVisualizerApp()
@@ -32,8 +32,8 @@
 0006: from typing import Dict, List, Optional
 0007: from dataclasses import dataclass
 0008: 
-0009: from src.analytics.risk import Position, RiskMetrics
-0010: from src.config import AppConfig
+0009: from .risk import Position, RiskMetrics
+0010: from ..config import AppConfig
 0011: 
 0012: class PortfolioVisualizer:
 0013:     """
@@ -637,8 +637,8 @@
 0006: from scipy.stats import norm
 0007: import logging
 0008: 
-0009: from src.models.base import OptionPricingModel
-0010: from src.config import AppConfig
+0009: from ..models.base import OptionPricingModel
+0010: from ..config import AppConfig
 0011: 
 0012: @dataclass
 0013: class RiskMetrics:
@@ -1110,8 +1110,8 @@
 0006: from typing import Dict, List, Optional, Tuple
 0007: from dataclasses import dataclass
 0008: 
-0009: from src.analytics.portfolio_visualization import VisualizationConfig
-0010: from src.models.base import OptionPricingModel
+0009: from .analytics.portfolio_visualization import VisualizationConfig
+0010: from ..models.base import OptionPricingModel
 0011: 
 0012: @dataclass
 0013: class StrategyProfile:
@@ -1660,9 +1660,9 @@
 0006: from typing import Dict, List, Optional, Tuple
 0007: from dataclasses import dataclass
 0008: 
-0009: from src.analytics.volatility import VolatilitySurface
-0010: from src.models.base import OptionResult
-0011: from src.config import AppConfig
+0009: from .volatility import VolatilitySurface
+0010: from ..models.base import OptionResult
+0011: from ..config import AppConfig
 0012: 
 0013: @dataclass
 0014: class VisualizationConfig:
@@ -1969,161 +1969,173 @@
 0002: 
 0003: import numpy as np
 0004: from dataclasses import dataclass, field
-0005: from typing import List, Optional
+0005: from typing import List, Optional, Dict
 0006: from scipy.interpolate import interp2d
 0007: from scipy.optimize import minimize
 0008: import pandas as pd
 0009: 
-0010: from src.config import AppConfig # Relative import (still works within the same package)
-0011: 
-0012: @dataclass
-0013: class VolatilitySurface:
-0014:     """Represents a volatility surface for option pricing."""
-0015:     strikes: np.ndarray
-0016:     expiries: np.ndarray
-0017:     volatilities: np.ndarray
-0018:     forward_prices: Optional[np.ndarray] = None
-0019:     metadata: Dict = field(default_factory=dict)
-0020: 
-0021:     def __post_init__(self):
-0022:         """
-0023:         Initialize interpolation function and validate surface.
-0024: 
-0025:         This function checks for sufficient data points and creates a 2D
-0026:         interpolation function that can be used to estimate volatility
-0027:         at any given strike and expiry within the surface's range.
-0028:         """
-0029:         if self.strikes.shape[0] < 2 or self.expiries.shape[0] < 2:
-0030:             raise ValueError("Insufficient data points for surface construction.")
-0031:         self.interpolation_func = interp2d(
-0032:             self.strikes,
-0033:             self.expiries,
-0034:             self.volatilities.T,
-0035:             kind='cubic'
-0036:         )
-0037: 
-0038:     def get_volatility(self, strike: float, expiry: float) -> float:
-0039:         """
-0040:         Get the interpolated volatility for a specific strike and expiry.
-0041: 
-0042:         Args:
-0043:             strike: Strike price of the option
-0044:             expiry: Time to expiry of the option in years
-0045: 
-0046:         Returns:
-0047:             Interpolated volatility at the given strike and expiry
-0048:         """
-0049:         if not (self.strikes.min() <= strike <= self.strikes.max()):
-0050:             raise ValueError(f"Strike {strike} is outside the valid range.")
-0051:         if not (self.expiries.min() <= expiry <= self.expiries.max()):
-0052:             raise ValueError(f"Expiry {expiry} is outside the valid range.")
-0053:         return self.interpolation_func(strike, expiry)[0]
-0054: 
-0055:     def calibrate_to_market(self, market_prices: pd.DataFrame,
-0056:                             model: 'OptionPricingModel',
-0057:                             method: str = 'Nelder-Mead') -> None:
-0058:         """
-0059:         Calibrate the volatility surface to observed market prices.
-0060: 
-0061:         This function adjusts the volatility surface to minimize the difference
-0062:         between model-predicted prices and market prices for a set of options.
-0063:         It's particularly useful for ensuring the surface reflects current
-0064:         market conditions.
-0065: 
-0066:         Args:
-0067:             market_prices: DataFrame containing market prices of options with columns
-0068:                            'strike', 'expiry', 'price'
-0069:             model: Option pricing model instance used for calibration
-0070:             method: Optimization method to use (from scipy.optimize.minimize)
-0071:         """
-0072:         def error_function(params):
-0073:             """Error function to minimize."""
-0074:             error = 0
-0075:             k = 0
-0076:             for _, row in market_prices.iterrows():
-0077:                 strike_idx = np.abs(self.strikes - row['strike']).argmin()
-0078:                 expiry_idx = np.abs(self.expiries - row['expiry']).argmin()
-0079: 
-0080:                 # Update volatility in the surface
-0081:                 self.volatilities[strike_idx, expiry_idx] = params[k]
-0082: 
-0083:                 # Update interpolation function
-0084:                 self.interpolation_func = interp2d(
-0085:                     self.strikes,
-0086:                     self.expiries,
-0087:                     self.volatilities.T,
-0088:                     kind='cubic'
-0089:                 )
-0090: 
-0091:                 # Calculate model price with updated volatility
-0092:                 model_price = model.price_option(
-0093:                     S=model.S,
-0094:                     K=row['strike'],
-0095:                     r=model.r,
-0096:                     sigma=self.get_volatility(row['strike'], row['expiry']),
-0097:                     T=row['expiry'],
-0098:                     option_type=row['option_type']
-0099:                 ).price
-0100: 
-0101:                 error += (model_price - row['price'])**2
-0102:                 k += 1
-0103:             return np.sqrt(error / len(market_prices))  # RMSE
-0104: 
-0105:         # Initial parameters (current volatilities)
-0106:         initial_params = self.volatilities.flatten()
-0107: 
-0108:         # Perform optimization
-0109:         result = minimize(
-0110:             error_function,
-0111:             initial_params,
-0112:             method=method,
-0113:             bounds=[(0.01, 1.0) for _ in range(len(initial_params))]  # Volatility bounds
-0114:         )
-0115: 
-0116:         if result.success:
-0117:             # Update volatilities with optimized values
-0118:             self.volatilities = result.x.reshape(self.volatilities.shape)
-0119: 
-0120:             # Rebuild interpolation function
-0121:             self.interpolation_func = interp2d(
-0122:                 self.strikes,
-0123:                 self.expiries,
-0124:                 self.volatilities.T,
-0125:                 kind='cubic'
-0126:             )
-0127: 
-0128:             print("Calibration successful.")
-0129:         else:
-0130:             print(f"Calibration failed: {result.message}")
-0131: 
-0132:     def visualize(self) -> None:
-0133:         """Visualize the volatility surface."""
-0134:         # Placeholder for visualization code
-0135:         pass
-0136: 
-0137: class VolatilityAnalyzer:
-0138:     """Analyzes and interprets volatility surfaces."""
-0139: 
-0140:     def __init__(self, pricing_model: 'OptionPricingModel'):
-0141:         """
-0142:         Initialize the Volatility Analyzer.
-0143: 
-0144:         Args:
-0145:             pricing_model: An instance of an option pricing model
-0146:         """
-0147:         self.model = pricing_model
-0148: 
-0149:     def calculate_implied_volatility(self, option_price: float, strike: float,
-0150:                                     expiry: float, option_type: str,
-0151:                                     method: str = 'brentq') -> float:
-0152:         """
-0153:         Calculate the implied volatility of an option using numerical methods.
-0154: 
-0155:         Args:
-0156:             option_price: Market price of the option
-0157:             strike: Strike price of the option
-0158:             expiry: Time to expiry of the option in years
-0159:             option_type: Type of the option ('call' or 'put')
+0010: from ..config import AppConfig
+0011: from ..models.black_scholes import BlackScholesModel
+0012: 
+0013: 
+0014: @dataclass
+0015: class VolatilitySurface:
+0016:     """Represents a volatility surface for option pricing."""
+0017:     strikes: np.ndarray
+0018:     expiries: np.ndarray
+0019:     volatilities: np.ndarray
+0020:     forward_prices: Optional[np.ndarray] = None
+0021:     metadata: Dict = field(default_factory=dict)
+0022: 
+0023:     def __post_init__(self):
+0024:         """
+0025:         Initialize interpolation function and validate surface.
+0026: 
+0027:         This function checks for sufficient data points and creates a 2D
+0028:         interpolation function that can be used to estimate volatility
+0029:         at any given strike and expiry within the surface's range.
+0030:         """
+0031:         if self.strikes.shape[0] < 2 or self.expiries.shape[0] < 2:
+0032:             raise ValueError("Insufficient data points for surface construction.")
+0033:         self.interpolation_func = interp2d(
+0034:             self.strikes,
+0035:             self.expiries,
+0036:             self.volatilities.T,
+0037:             kind='cubic'
+0038:         )
+0039: 
+0040:     def get_volatility(self, strike: float, expiry: float) -> float:
+0041:         """
+0042:         Get the interpolated volatility for a specific strike and expiry.
+0043: 
+0044:         Args:
+0045:             strike: Strike price of the option
+0046:             expiry: Time to expiry of the option in years
+0047: 
+0048:         Returns:
+0049:             Interpolated volatility at the given strike and expiry
+0050:         """
+0051:         if not (self.strikes.min() <= strike <= self.strikes.max()):
+0052:             raise ValueError(f"Strike {strike} is outside the valid range.")
+0053:         if not (self.expiries.min() <= expiry <= self.expiries.max()):
+0054:             raise ValueError(f"Expiry {expiry} is outside the valid range.")
+0055:         return self.interpolation_func(strike, expiry)[0]
+0056: 
+0057:     def calibrate_to_market(self, market_prices: pd.DataFrame,
+0058:                              model: 'OptionPricingModel',
+0059:                              method: str = 'Nelder-Mead') -> None:
+0060:         """
+0061:         Calibrate the volatility surface to observed market prices.
+0062: 
+0063:         This function adjusts the volatility surface to minimize the difference
+0064:         between model-predicted prices and market prices for a set of options.
+0065:         It's particularly useful for ensuring the surface reflects current
+0066:         market conditions.
+0067: 
+0068:         Args:
+0069:             market_prices: DataFrame containing market prices of options with columns
+0070:                            'strike', 'expiry', 'price'
+0071:             model: Option pricing model instance used for calibration
+0072:             method: Optimization method to use (from scipy.optimize.minimize)
+0073:         """
+0074:         def error_function(params):
+0075:             """Error function to minimize."""
+0076:             error = 0
+0077:             k = 0
+0078:             for _, row in market_prices.iterrows():
+0079:                 strike_idx = np.abs(self.strikes - row['strike']).argmin()
+0080:                 expiry_idx = np.abs(self.expiries - row['expiry']).argmin()
+0081: 
+0082:                 # Update volatility in the surface
+0083:                 self.volatilities[strike_idx, expiry_idx] = params[k]
+0084: 
+0085:                 # Update interpolation function
+0086:                 self.interpolation_func = interp2d(
+0087:                     self.strikes,
+0088:                     self.expiries,
+0089:                     self.volatilities.T,
+0090:                     kind='cubic'
+0091:                 )
+0092: 
+0093:                 # Calculate model price with updated volatility
+0094:                 model_price = model.price_option(
+0095:                     S=model.S,
+0096:                     K=row['strike'],
+0097:                     r=model.r,
+0098:                     sigma=self.get_volatility(row['strike'], row['expiry']),
+0099:                     T=row['expiry'],
+0100:                     option_type=row['option_type']
+0101:                 ).price
+0102: 
+0103:                 error += (model_price - row['price'])**2
+0104:                 k += 1
+0105:             return np.sqrt(error / len(market_prices))  # RMSE
+0106: 
+0107:         # Initial parameters (current volatilities)
+0108:         initial_params = self.volatilities.flatten()
+0109: 
+0110:         # Perform optimization
+0111:         result = minimize(
+0112:             error_function,
+0113:             initial_params,
+0114:             method=method,
+0115:             bounds=[(0.01, 1.0) for _ in range(len(initial_params))]  # Volatility bounds
+0116:         )
+0117: 
+0118:         if result.success:
+0119:             # Update volatilities with optimized values
+0120:             self.volatilities = result.x.reshape(self.volatilities.shape)
+0121: 
+0122:             # Rebuild interpolation function
+0123:             self.interpolation_func = interp2d(
+0124:                 self.strikes,
+0125:                 self.expiries,
+0126:                 self.volatilities.T,
+0127:                 kind='cubic'
+0128:             )
+0129: 
+0130:             print("Calibration successful.")
+0131:         else:
+0132:             print(f"Calibration failed: {result.message}")
+0133: 
+0134:     def visualize(self) -> None:
+0135:         """Visualize the volatility surface."""
+0136:         # Placeholder for visualization code
+0137:         pass
+0138: 
+0139: class VolatilityAnalyzer:
+0140:     """Analyzes and interprets volatility surfaces."""
+0141: 
+0142:     def __init__(self, pricing_model: 'OptionPricingModel'):
+0143:         """
+0144:         Initialize the Volatility Analyzer.
+0145: 
+0146:         Args:
+0147:             pricing_model: An instance of an option pricing model
+0148:         """
+0149:         self.model = pricing_model
+0150: 
+0151:     def calculate_implied_volatility(self, option_price: float, strike: float,
+0152:                                      expiry: float, option_type: str,
+0153:                                      method: str = 'brentq') -> float:
+0154:         """
+0155:         Calculate the implied volatility of an option using numerical methods.
+0156: 
+0157:         Args:
+0158:             option_price: Market price of the option
+0159:             strike: Strike price of the option
+0160:             expiry: Time to expiry of the option in years
+0161:             option_type: Type of the option ('call' or 'put')
+0162:         """
+0163:         # Using the implied_volatility method of the BlackScholesModel
+0164:         if option_type.lower() == "call":
+0165:             iv = self.model.implied_volatility(option_price, self.model.S, strike, self.model.r, expiry, option_type)
+0166:         elif option_type.lower() == "put":
+0167:             iv = self.model.implied_volatility(option_price, self.model.S, strike, self.model.r, expiry, option_type)
+0168:         else:
+0169:             raise ValueError("Invalid option_type. Must be 'call' or 'put'")
+0170: 
+0171:         return iv
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\config.py
 // ----------------------------------------
@@ -2197,9 +2209,9 @@
 0004: from typing import Dict, Optional, Tuple
 0005: from dataclasses import dataclass
 0006: 
-0007: from src.models.base import OptionPricingModel, OptionResult
-0008: from src.utils.validation import validate_parameters
-0009: from src.config import AppConfig
+0007: from ..models.base import OptionPricingModel, OptionResult
+0008: from ..utils.validation import validate_parameters
+0009: from ..config import AppConfig
 0010: 
 0011: @dataclass
 0012: class BinomialParameters:
@@ -2451,9 +2463,9 @@
 0006: import logging
 0007: from scipy.stats import norm
 0008: 
-0009: from src.models.base import OptionPricingModel, OptionResult
-0010: from src.utils.validation import validate_parameters
-0011: from src.config import AppConfig
+0009: from ..models.base import OptionPricingModel, OptionResult
+0010: from ..utils.validation import validate_parameters
+0011: from ..config import AppConfig
 0012: 
 0013: @dataclass
 0014: class BlackScholesParameters:
@@ -2819,9 +2831,9 @@
 0006: from concurrent.futures import ProcessPoolExecutor
 0007: import logging
 0008: 
-0009: from src.models.base import OptionPricingModel, OptionResult
-0010: from src.utils.validation import validate_parameters
-0011: from src.config import AppConfig
+0009: from ..models.base import OptionPricingModel, OptionResult
+0010: from ..utils.validation import validate_parameters
+0011: from ..config import AppConfig
 0012: 
 0013: @dataclass
 0014: class SimulationResult:
@@ -3129,7 +3141,7 @@
 0004: from plotly.subplots import make_subplots
 0005: import numpy as np
 0006: from typing import List, Optional
-0007: from src.analytics.risk import Position # Relative import (still works within the same package)
+0007: from ..analytics.risk import Position # Relative import (still works within the same package)
 0008: 
 0009: class OptionPayoffChart:
 0010:     """Component for displaying option payoff and risk profiles."""
@@ -3301,7 +3313,7 @@
 0003: import streamlit as st
 0004: import pandas as pd
 0005: from typing import List
-0006: from src.analytics.risk import Position # Relative import (still works within the same package)
+0006: from ..analytics.risk import Position # Relative import (still works within the same package)
 0007: 
 0008: class PortfolioTable:
 0009:     """Interactive portfolio position display and management component."""
@@ -4236,15 +4248,15 @@
 0003: from typing import Dict, List, Optional
 0004: import plotly.graph_objects as go
 0005: 
-0006: from src.models.black_scholes import BlackScholesModel # Absolute import
-0007: from src.models.binomial import BinomialModel # Absolute import
-0008: from src.models.monte_carlo import MonteCarloModel # Absolute import
-0009: from src.analytics.portfolio_visualization import PortfolioVisualizer # Absolute import
-0010: from src.analytics.strategy_visualization import StrategyVisualizer # Absolute import
-0011: from src.analytics.risk import RiskAnalyzer # Absolute import
-0012: from src.analytics.volatility import VolatilitySurface # Absolute import
+0006: from ..models.black_scholes import BlackScholesModel # Absolute import
+0007: from ..models.binomial import BinomialModel # Absolute import
+0008: from ..models.monte_carlo import MonteCarloModel # Absolute import
+0009: from ..analytics.portfolio_visualization import PortfolioVisualizer # Absolute import
+0010: from ..analytics.strategy_visualization import StrategyVisualizer # Absolute import
+0011: from ..analytics.risk import RiskAnalyzer # Absolute import
+0012: from ..analytics.volatility import VolatilitySurface # Absolute import
 0013: from .education import OptionsEducation # Relative import (still works within the same package)
-0014: from src.config import AppConfig # Absolute import
+0014: from ..config import AppConfig # Absolute import
 0015: from .pages.home import render_page as render_home
 0016: from .pages.option_pricing import render_page as render_option_pricing
 0017: from .pages.portfolio import render_page as render_portfolio
@@ -4685,9 +4697,9 @@
 0001: # src/ui/pages/education.py
 0002: 
 0003: import streamlit as st
-0004: from src.ui.components.charts import OptionPayoffChart
-0005: from src.models.black_scholes import BlackScholesModel
-0006: from src.analytics.risk import Position
+0004: from ..ui.components.charts import OptionPayoffChart
+0005: from ..models.black_scholes import BlackScholesModel
+0006: from ..analytics.risk import Position
 0007: 
 0008: def render_page():
 0009:     """
@@ -5530,8 +5542,8 @@
 // ----------------------------------------
 0001: # src/ui/pages/option_pricing.py
 0002: import streamlit as st
-0003: from src.ui.components.option_inputs import OptionInputs # Relative import (still works within the same package)
-0004: from src.models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
+0003: from ..ui.components.option_inputs import OptionInputs # Relative import (still works within the same package)
+0004: from ..models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
 0005: 
 0006: def render_page():
 0007:     """Render the option pricing analysis page."""
@@ -5586,10 +5598,10 @@
 0003: import streamlit as st
 0004: import pandas as pd
 0005: from typing import List
-0006: from src.ui.components.portfolio_table import PortfolioTable # Relative import (still works within the same package)
-0007: from src.ui.components.charts import OptionPayoffChart # Relative import (still works within the same package)
-0008: from src.analytics.risk import Position, RiskAnalyzer # Relative import (still works within the same package)
-0009: from src.models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
+0006: from ..ui.components.portfolio_table import PortfolioTable # Relative import (still works within the same package)
+0007: from ..ui.components.charts import OptionPayoffChart # Relative import (still works within the same package)
+0008: from ..analytics.risk import Position, RiskAnalyzer # Relative import (still works within the same package)
+0009: from ..models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
 0010: 
 0011: def render_page():
 0012:     """
@@ -5693,40 +5705,42 @@
 0110: def _render_portfolio_analysis():
 0111:     """Render portfolio analysis section."""
 0112:     st.subheader("Portfolio Analysis")
-0113:     
+0113: 
 0114:     # Display current positions
 0115:     portfolio_table = PortfolioTable(st.session_state.portfolio_positions)
 0116:     portfolio_table.render()
-0117:     
-0118:     # Initialize risk analyzer
+0117: 
+0118:     # Initialize risk analyzer with Black-Scholes model
 0119:     risk_analyzer = RiskAnalyzer(BlackScholesModel())
-0120:     risk_metrics = risk_analyzer.calculate_portfolio_risk(
-0121:         st.session_state.portfolio_positions
-0122:     )
-0123:     
-0124:     # Display risk metrics
-0125:     col1, col2, col3 = st.columns(3)
-0126:     with col1:
-0127:         st.metric("Delta Exposure", f"{risk_metrics.delta_exposure:.2f}")
-0128:     with col2:
-0129:         st.metric("Value at Risk (95%)", f"${risk_metrics.value_at_risk:.2f}")
-0130:     with col3:
-0131:         st.metric("Expected Shortfall", f"${risk_metrics.expected_shortfall:.2f}")
-0132:     
-0133:     # Display payoff chart
-0134:     payoff_chart = OptionPayoffChart()
-0135:     fig = payoff_chart.create_payoff_chart(st.session_state.portfolio_positions)
-0136:     st.plotly_chart(fig, use_container_width=True)
-0137:     
-0138:     # Stress test results
-0139:     if risk_metrics.stress_scenarios:
-0140:         st.subheader("Stress Test Results")
-0141:         scenarios_df = pd.DataFrame.from_dict(
-0142:             risk_metrics.stress_scenarios, 
-0143:             orient='index',
-0144:             columns=['P&L Impact']
-0145:         )
-0146:         st.dataframe(scenarios_df)
+0120: 
+0121:     # Calculate risk metrics
+0122:     risk_metrics = risk_analyzer.calculate_portfolio_risk(
+0123:         st.session_state.portfolio_positions
+0124:     )
+0125: 
+0126:     # Display risk metrics
+0127:     col1, col2, col3 = st.columns(3)
+0128:     with col1:
+0129:         st.metric("Delta Exposure", f"{risk_metrics.delta_exposure:.2f}")
+0130:     with col2:
+0131:         st.metric("Value at Risk (95%)", f"${risk_metrics.value_at_risk:.2f}")
+0132:     with col3:
+0133:         st.metric("Expected Shortfall", f"${risk_metrics.expected_shortfall:.2f}")
+0134: 
+0135:     # Display payoff chart
+0136:     payoff_chart = OptionPayoffChart()
+0137:     fig = payoff_chart.create_payoff_chart(st.session_state.portfolio_positions)
+0138:     st.plotly_chart(fig, use_container_width=True)
+0139: 
+0140:     # Stress test results
+0141:     if risk_metrics.stress_scenarios:
+0142:         st.subheader("Stress Test Results")
+0143:         scenarios_df = pd.DataFrame.from_dict(
+0144:             risk_metrics.stress_scenarios,
+0145:             orient='index',
+0146:             columns=['P&L Impact']
+0147:         )
+0148:         st.dataframe(scenarios_df)
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\__init__.py
 // ----------------------------------------
