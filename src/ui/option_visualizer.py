@@ -12,12 +12,12 @@ from src.analytics.risk import RiskAnalyzer
 from src.analytics.volatility import VolatilitySurface
 from .education import OptionsEducation
 from src.config import AppConfig
+
 from .pages.home import render_page as render_home
 from .pages.option_pricing import render_page as render_option_pricing
 from .pages.portfolio import render_page as render_portfolio
 from .pages.education import render_page as render_education
 from .pages.strategy_builder import render_page as render_strategy_builder
-
 
 class OptionVisualizerApp:
     """
