@@ -10,7 +10,7 @@ from ..models.binomial import BinomialModel
 from ..models.monte_carlo import MonteCarloModel
 from ..analytics.portfolio_visualization import PortfolioVisualizer
 from ..analytics.strategy_visualization import StrategyVisualizer
-from ..analytics.volatility import VolatilityAnalyzer
+from ..analytics.volatility import RiskAnalyzer
 from .education import OptionsEducation
 from ..config import AppConfig
 
@@ -36,7 +36,7 @@ class OptionVisualizerApp:
         # Initialize visualization components
         self.portfolio_viz = PortfolioVisualizer()
         self.strategy_viz = StrategyVisualizer(self.black_scholes)
-        self.vol_analyzer = VolatilityAnalyzer(self.black_scholes)
+        self.vol_analyzer = RiskAnalyzer(self.black_scholes)
         
         # Initialize educational content
         self.education = OptionsEducation()
@@ -61,7 +61,7 @@ class OptionVisualizerApp:
             "Option Pricing",
             "Strategy Builder",
             "Portfolio Analysis",
-            "Volatility Analysis",
+            "Risk Analysis",
             "Learning Center"
         ]
         
@@ -74,8 +74,6 @@ class OptionVisualizerApp:
             self._render_strategy_tab()
         elif selected_tab == "Portfolio Analysis":
             self._render_portfolio_tab()
-        elif selected_tab == "Volatility Analysis":
-            self._render_volatility_tab()
         else:  # Learning Center
             self._render_learning_tab()
     
