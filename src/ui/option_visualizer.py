@@ -3,15 +3,15 @@ import streamlit as st
 from typing import Dict, List, Optional
 import plotly.graph_objects as go
 
-from src.models.black_scholes import BlackScholesModel 
-from src.models.binomial import BinomialModel 
-from src.models.monte_carlo import MonteCarloModel 
-from src.analytics.portfolio_visualization import PortfolioVisualizer 
-from src.analytics.strategy_visualization import StrategyVisualizer 
-from src.analytics.risk import RiskAnalyzer 
-from src.analytics.volatility import VolatilitySurface 
-from .education import OptionsEducation # Relative import (still works within the same package)
-from src.config import AppConfig 
+from src.models.black_scholes import BlackScholesModel
+from src.models.binomial import BinomialModel
+from src.models.monte_carlo import MonteCarloModel
+from src.analytics.portfolio_visualization import PortfolioVisualizer
+from src.analytics.strategy_visualization import StrategyVisualizer
+from src.analytics.risk import RiskAnalyzer
+from src.analytics.volatility import VolatilitySurface
+from .education import OptionsEducation
+from src.config import AppConfig
 from .pages.home import render_page as render_home
 from .pages.option_pricing import render_page as render_option_pricing
 from .pages.portfolio import render_page as render_portfolio
@@ -76,10 +76,10 @@ class OptionVisualizerApp:
         if selected_tab == "Option Pricing":
             self._render_pricing_tab()
         elif selected_tab == "Strategy Builder":
-            self._render_strategy_tab()
+            render_strategy_builder() # Render strategy builder page
         elif selected_tab == "Portfolio Analysis":
             self._render_portfolio_tab()
-        else:  # Learning Center
+        else: # Learning Center
             self._render_learning_tab()
     
     def _render_header(self):
@@ -210,8 +210,8 @@ class OptionVisualizerApp:
         )
     
     def _calculate_model_results(self, models: List[str], S: float, K: float,
-                               T: float, sigma: float, r: float,
-                               option_type: str) -> Dict[str, float]:
+                                 T: float, sigma: float, r: float,
+                                 option_type: str) -> Dict[str, float]:
         """Calculate option prices and Greeks using selected models."""
         results = {}
         
@@ -222,12 +222,11 @@ class OptionVisualizerApp:
                 else:
                     result = self.black_scholes.price_put(S, K, r, sigma, T)
             elif model == "Binomial":
-                result = self.binomial.price_option(
+                result = self.binomial.price_european(
                     S, K, r, sigma, T,
-                    option_type=option_type,
-                    exercise="european"
+                    option_type=option_type
                 )
-            else:  # Monte Carlo
+            else: # Monte Carlo
                 if option_type == "call":
                     result = self.monte_carlo.price_call(S, K, r, sigma, T)
                 else:
@@ -257,11 +256,11 @@ class OptionVisualizerApp:
                         st.metric(greek.capitalize(), f"{value:.4f}")
     
     def _display_pricing_visualization(self, viz_type: str, results: Dict,
-                                    current_price: float, strike: float):
+                                     current_price: float, strike: float):
         """Create and display interactive pricing visualizations."""
         # Implementation of visualization logic...
         pass
-
+    
     def _render_strategy_tab(self):
         """Render the strategy builder and analysis tab."""
         st.header("Options Strategy Builder")
@@ -336,7 +335,7 @@ class OptionVisualizerApp:
             
             self._display_strategy_analysis(strategy_profile)
             
-        else:  # Custom Strategy Builder
+        else: # Custom Strategy Builder
             st.subheader("Build Custom Strategy")
             
             # Initialize or get existing legs
@@ -399,8 +398,7 @@ class OptionVisualizerApp:
                         if st.button("Remove", key=f"remove_{i}"):
                             st.session_state.strategy_legs.pop(i)
                             st.experimental_rerun()
-                
-                # Analyze custom strategy
+                            # Analyze custom strategy
                 custom_profile = self._generate_custom_strategy_profile(
                     st.session_state.strategy_legs
                 )
@@ -435,7 +433,7 @@ class OptionVisualizerApp:
                 positions = self._parse_portfolio_file(uploaded_file)
                 self._analyze_portfolio(positions)
         
-        else:  # Sample Portfolio
+        else: # Sample Portfolio
             sample_name = st.selectbox(
                 "Select Sample Portfolio",
                 ["Covered Call Strategy", "Iron Condor Portfolio", "Delta-Neutral"]
@@ -443,3 +441,176 @@ class OptionVisualizerApp:
             
             positions = self._get_sample_portfolio(sample_name)
             self._analyze_portfolio(positions)
+
+    def _apply_custom_styling(self):
+        """Apply custom CSS styling to improve the look."""
+        st.markdown(
+            """
+            <style>
+            /* Customize Streamlit elements */
+            .stApp {
+                background-color: #f0f2f6; /* Light gray background */
+            }
+            .stTextInput, .stNumberInput, .stSelectbox, .stSlider {
+                background-color: #ffffff; /* White input fields */
+                border: 1px solid #ced4da; /* Light gray border */
+                border-radius: 5px; /* Rounded corners */
+            }
+            .stButton button {
+                background-color: #007bff; /* Primary blue color */
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 0.5rem 1rem;
+            }
+            .stButton button:hover {
+                background-color: #0056b3; /* Darker blue on hover */
+            }
+            .stMetric {
+                background-color: #e9ecef; /* Light gray background */
+                border-radius: 5px;
+                padding: 0.5rem;
+            }
+            .stMetric > div > div {
+                font-size: 1.5rem; /* Larger font size for metric value */
+            }
+            .stMetric > div > div:nth-child(2) {
+                font-size: 0.9rem; /* Smaller font size for label */
+            }
+            .stMarkdown p {
+                font-size: 1.1em; /* Slightly larger paragraph text */
+            }
+            .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
+                color: #2c3e50; /* Dark blue for headings */
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    def _calculate_model_results(self, models, S, K, T, sigma, r, option_type):
+        """Calculate option prices using the selected models."""
+        results = {}
+        for model_name in models:
+            if model_name == "Black-Scholes":
+                model = BlackScholesModel()
+                if option_type == 'call':
+                    results[model_name] = model.price_call(S, K, r, sigma, T)
+                else:
+                    results[model_name] = model.price_put(S, K, r, sigma, T)
+            elif model_name == "Binomial":
+                model = BinomialModel()
+                # Assuming pricing for European options here
+                results[model_name] = model.price_european(S, K, r, sigma, T, option_type)
+            elif model_name == "Monte Carlo":
+                model = MonteCarloModel()
+                if option_type == 'call':
+                    results[model_name] = model.price_call(S, K, r, sigma, T)
+                else:
+                    results[model_name] = model.price_put(S, K, r, sigma, T)
+        return results
+
+    def _display_pricing_results(self, results):
+        """Display the pricing results in Streamlit metrics format."""
+        st.subheader("Pricing Results")
+        cols = st.columns(len(results))
+        for i, (model_name, result) in enumerate(results.items()):
+            with cols[i]:
+                st.metric(label=f"{model_name} Price", value=f"{result.price:.2f}")
+                if result.greeks:
+                    st.markdown("Greeks:")
+                    for greek, value in result.greeks.items():
+                        st.text(f"{greek}: {value:.4f}")
+
+    def _display_pricing_visualization(self, visualization_type, results, underlying_price, strike_price):
+        """Display the selected visualization."""
+        # This function can be expanded to include more sophisticated visualizations
+        # using Plotly or other visualization libraries, based on the selected type.
+        if visualization_type == "Price vs. Underlying":
+            self._plot_price_vs_underlying(results, underlying_price, strike_price)
+        elif visualization_type == "Greeks Profile":
+            self._plot_greeks_profile(results, underlying_price, strike_price)
+        elif visualization_type == "Time Decay":
+            self._plot_time_decay(results, underlying_price, strike_price)
+
+    def _plot_price_vs_underlying(self, results, underlying_price, strike_price):
+        """Plot option price vs. underlying price for the selected models."""
+        fig = go.Figure()
+        price_range = np.linspace(underlying_price * 0.5, underlying_price * 1.5, 100)
+
+        for model_name, result in results.items():
+            prices = []
+            if model_name == "Black-Scholes":
+                for S in price_range:
+                    if result.additional_info['parameters'].option_type == 'call':
+                        price = self.black_scholes.price_call(S, strike_price, result.additional_info['parameters'].r,
+                                                             result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                    else:
+                        price = self.black_scholes.price_put(S, strike_price, result.additional_info['parameters'].r,
+                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                    prices.append(price)
+            elif model_name == "Binomial":
+                for S in price_range:
+                    prices.append(self.binomial.price_european(S, strike_price, result.additional_info['parameters'].r,
+                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
+                                                            result.additional_info['parameters'].option_type).price)
+            elif model_name == "Monte Carlo":
+                for S in price_range:
+                    if result.additional_info['parameters'].option_type == 'call':
+                        price = self.monte_carlo.price_call(S, strike_price, result.additional_info['parameters'].r,
+                                                           result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                    else:
+                        price = self.monte_carlo.price_put(S, strike_price, result.additional_info['parameters'].r,
+                                                          result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                    prices.append(price)
+
+            fig.add_trace(go.Scatter(x=price_range, y=prices, mode='lines', name=model_name))
+
+        fig.update_layout(title='Option Price vs. Underlying Price',
+                          xaxis_title='Underlying Price',
+                          yaxis_title='Option Price')
+        st.plotly_chart(fig)
+
+    def _plot_greeks_profile(self, results, underlying_price, strike_price):
+        """Plot Greeks profile for the selected models."""
+        # This is a placeholder for the actual implementation.
+        # You will need to implement the logic to calculate and plot the Greeks.
+        st.info("Greek profile visualization is not yet implemented.")
+
+    def _plot_time_decay(self, results, underlying_price, strike_price):
+        """Plot option price vs. time to expiry for the selected models."""
+        fig = go.Figure()
+        time_range = np.linspace(0.1, 2.0, 100)  # Example time range
+
+        for model_name, result in results.items():
+            prices = []
+            if model_name == "Black-Scholes":
+                for T in time_range:
+                    if result.additional_info['parameters'].option_type == 'call':
+                        price = self.black_scholes.price_call(underlying_price, strike_price, result.additional_info['parameters'].r,
+                                                             result.additional_info['parameters'].sigma, T).price
+                    else:
+                        price = self.black_scholes.price_put(underlying_price, strike_price, result.additional_info['parameters'].r,
+                                                            result.additional_info['parameters'].sigma, T).price
+                    prices.append(price)
+            elif model_name == "Binomial":
+                for T in time_range:
+                    prices.append(self.binomial.price_european(underlying_price, strike_price, result.additional_info['parameters'].r,
+                                                            result.additional_info['parameters'].sigma, T,
+                                                            result.additional_info['parameters'].option_type).price)
+            elif model_name == "Monte Carlo":
+                for T in time_range:
+                    if result.additional_info['parameters'].option_type == 'call':
+                        price = self.monte_carlo.price_call(underlying_price, strike_price, result.additional_info['parameters'].r,
+                                                           result.additional_info['parameters'].sigma, T).price
+                    else:
+                        price = self.monte_carlo.price_put(underlying_price, strike_price, result.additional_info['parameters'].r,
+                                                          result.additional_info['parameters'].sigma, T).price
+                    prices.append(price)
+
+            fig.add_trace(go.Scatter(x=time_range, y=prices, mode='lines', name=model_name))
+
+        fig.update_layout(title='Option Price vs. Time to Expiry',
+                          xaxis_title='Time to Expiry (Years)',
+                          yaxis_title='Option Price')
+        st.plotly_chart(fig)

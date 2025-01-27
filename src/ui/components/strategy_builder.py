@@ -1,8 +1,8 @@
-# src/ui/components/strategy_builder.py
+# src/ui/pages/strategy_builder.py
 import streamlit as st
 from dataclasses import dataclass
 from typing import List, Optional
-from .option_inputs import OptionParameters
+from src.ui.components.common import OptionInputs, OptionParameters
 
 @dataclass
 class StrategyLeg:
@@ -65,12 +65,6 @@ class StrategyBuilder:
                     col1, col2, col3 = st.columns([2, 2, 1])
                     with col1:
                         st.write(f"{leg.position.title()} {abs(leg.quantity)} "
-                               f"{leg.option_params.option_type.title()}")
+                                 f"{leg.option_params.option_type.title()}")
                     with col2:
-                        st.write(f"Strike: ${leg.option_params.strike_price:.2f}")
-                    with col3:
-                        if st.button("Remove", key=f"remove_{i}"):
-                            st.session_state.strategy_legs.pop(i)
-                            st.experimental_rerun()
-        
-        return st.session_state.strategy_legs
+                        st.write(f"Strike: ${leg.option_params
