@@ -7,8 +7,8 @@ from scipy.interpolate import interp2d
 from scipy.optimize import minimize
 import pandas as pd
 
-from ..config import AppConfig
-from ..models.black_scholes import BlackScholesModel
+from src.config import AppConfig
+from src.models.black_scholes import BlackScholesModel
 
 
 @dataclass

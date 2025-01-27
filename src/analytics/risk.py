@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Tuple
 from scipy.stats import norm
 import logging
 
-from ..models.base import OptionPricingModel
-from ..config import AppConfig
+from src.models.base import OptionPricingModel
+from src.config import AppConfig
 
 @dataclass
 class RiskMetrics:

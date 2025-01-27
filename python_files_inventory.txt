@@ -33,7 +33,7 @@
 0007: from dataclasses import dataclass
 0008: 
 0009: from .risk import Position, RiskMetrics
-0010: from ..config import AppConfig
+0010: from src.config import AppConfig
 0011: 
 0012: class PortfolioVisualizer:
 0013:     """
@@ -637,8 +637,8 @@
 0006: from scipy.stats import norm
 0007: import logging
 0008: 
-0009: from ..models.base import OptionPricingModel
-0010: from ..config import AppConfig
+0009: from src.models.base import OptionPricingModel
+0010: from src.config import AppConfig
 0011: 
 0012: @dataclass
 0013: class RiskMetrics:
@@ -1111,7 +1111,7 @@
 0007: from dataclasses import dataclass
 0008: 
 0009: from .analytics.portfolio_visualization import VisualizationConfig
-0010: from ..models.base import OptionPricingModel
+0010: from src.models.base import OptionPricingModel
 0011: 
 0012: @dataclass
 0013: class StrategyProfile:
@@ -1661,8 +1661,8 @@
 0007: from dataclasses import dataclass
 0008: 
 0009: from .volatility import VolatilitySurface
-0010: from ..models.base import OptionResult
-0011: from ..config import AppConfig
+0010: from src.models.base import OptionResult
+0011: from src.config import AppConfig
 0012: 
 0013: @dataclass
 0014: class VisualizationConfig:
@@ -1974,8 +1974,8 @@
 0007: from scipy.optimize import minimize
 0008: import pandas as pd
 0009: 
-0010: from ..config import AppConfig
-0011: from ..models.black_scholes import BlackScholesModel
+0010: from src.config import AppConfig
+0011: from src.models.black_scholes import BlackScholesModel
 0012: 
 0013: 
 0014: @dataclass
@@ -2209,9 +2209,9 @@
 0004: from typing import Dict, Optional, Tuple
 0005: from dataclasses import dataclass
 0006: 
-0007: from ..models.base import OptionPricingModel, OptionResult
-0008: from ..utils.validation import validate_parameters
-0009: from ..config import AppConfig
+0007: from src.models.base import OptionPricingModel, OptionResult
+0008: from src.utils.validation import validate_parameters
+0009: from src.config import AppConfig
 0010: 
 0011: @dataclass
 0012: class BinomialParameters:
@@ -2463,9 +2463,9 @@
 0006: import logging
 0007: from scipy.stats import norm
 0008: 
-0009: from ..models.base import OptionPricingModel, OptionResult
-0010: from ..utils.validation import validate_parameters
-0011: from ..config import AppConfig
+0009: from src.models.base import OptionPricingModel, OptionResult
+0010: from src.utils.validation import validate_parameters
+0011: from src.config import AppConfig
 0012: 
 0013: @dataclass
 0014: class BlackScholesParameters:
@@ -2831,9 +2831,9 @@
 0006: from concurrent.futures import ProcessPoolExecutor
 0007: import logging
 0008: 
-0009: from ..models.base import OptionPricingModel, OptionResult
-0010: from ..utils.validation import validate_parameters
-0011: from ..config import AppConfig
+0009: from src.models.base import OptionPricingModel, OptionResult
+0010: from src.utils.validation import validate_parameters
+0011: from src.config import AppConfig
 0012: 
 0013: @dataclass
 0014: class SimulationResult:
@@ -3141,7 +3141,7 @@
 0004: from plotly.subplots import make_subplots
 0005: import numpy as np
 0006: from typing import List, Optional
-0007: from ..analytics.risk import Position # Relative import (still works within the same package)
+0007: from src.analytics.risk import Position # Relative import (still works within the same package)
 0008: 
 0009: class OptionPayoffChart:
 0010:     """Component for displaying option payoff and risk profiles."""
@@ -3313,7 +3313,7 @@
 0003: import streamlit as st
 0004: import pandas as pd
 0005: from typing import List
-0006: from ..analytics.risk import Position # Relative import (still works within the same package)
+0006: from src.analytics.risk import Position # Relative import (still works within the same package)
 0007: 
 0008: class PortfolioTable:
 0009:     """Interactive portfolio position display and management component."""
@@ -4248,15 +4248,15 @@
 0003: from typing import Dict, List, Optional
 0004: import plotly.graph_objects as go
 0005: 
-0006: from ..models.black_scholes import BlackScholesModel # Absolute import
-0007: from ..models.binomial import BinomialModel # Absolute import
-0008: from ..models.monte_carlo import MonteCarloModel # Absolute import
-0009: from ..analytics.portfolio_visualization import PortfolioVisualizer # Absolute import
-0010: from ..analytics.strategy_visualization import StrategyVisualizer # Absolute import
-0011: from ..analytics.risk import RiskAnalyzer # Absolute import
-0012: from ..analytics.volatility import VolatilitySurface # Absolute import
+0006: from src.models.black_scholes import BlackScholesModel # Absolute import
+0007: from src.models.binomial import BinomialModel # Absolute import
+0008: from src.models.monte_carlo import MonteCarloModel # Absolute import
+0009: from src.analytics.portfolio_visualization import PortfolioVisualizer # Absolute import
+0010: from src.analytics.strategy_visualization import StrategyVisualizer # Absolute import
+0011: from src.analytics.risk import RiskAnalyzer # Absolute import
+0012: from src.analytics.volatility import VolatilitySurface # Absolute import
 0013: from .education import OptionsEducation # Relative import (still works within the same package)
-0014: from ..config import AppConfig # Absolute import
+0014: from src.config import AppConfig # Absolute import
 0015: from .pages.home import render_page as render_home
 0016: from .pages.option_pricing import render_page as render_option_pricing
 0017: from .pages.portfolio import render_page as render_portfolio
@@ -4697,9 +4697,9 @@
 0001: # src/ui/pages/education.py
 0002: 
 0003: import streamlit as st
-0004: from ..ui.components.charts import OptionPayoffChart
-0005: from ..models.black_scholes import BlackScholesModel
-0006: from ..analytics.risk import Position
+0004: from src.ui.components.charts import OptionPayoffChart
+0005: from src.models.black_scholes import BlackScholesModel
+0006: from src.analytics.risk import Position
 0007: 
 0008: def render_page():
 0009:     """
@@ -5542,8 +5542,8 @@
 // ----------------------------------------
 0001: # src/ui/pages/option_pricing.py
 0002: import streamlit as st
-0003: from ..ui.components.option_inputs import OptionInputs # Relative import (still works within the same package)
-0004: from ..models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
+0003: from src.ui.components.option_inputs import OptionInputs # Relative import (still works within the same package)
+0004: from src.models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
 0005: 
 0006: def render_page():
 0007:     """Render the option pricing analysis page."""
@@ -5598,10 +5598,10 @@
 0003: import streamlit as st
 0004: import pandas as pd
 0005: from typing import List
-0006: from ..ui.components.portfolio_table import PortfolioTable # Relative import (still works within the same package)
-0007: from ..ui.components.charts import OptionPayoffChart # Relative import (still works within the same package)
-0008: from ..analytics.risk import Position, RiskAnalyzer # Relative import (still works within the same package)
-0009: from ..models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
+0006: from src.ui.components.portfolio_table import PortfolioTable # Relative import (still works within the same package)
+0007: from src.ui.components.charts import OptionPayoffChart # Relative import (still works within the same package)
+0008: from src.analytics.risk import Position, RiskAnalyzer # Relative import (still works within the same package)
+0009: from src.models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
 0010: 
 0011: def render_page():
 0012:     """
@@ -6435,8 +6435,8 @@
 0022: import time
 0023: import threading
 0024: from concurrent.futures import ThreadPoolExecutor
-0025: from ..utils.cache import Cache, cached
-0026: from ..config import AppConfig
+0025: from src.utils.cache import Cache, cached
+0026: from src.config import AppConfig
 0027: 
 0028: logger = logging.getLogger(__name__)
 0029: 
@@ -6926,7 +6926,7 @@
 0001: # src/utils/optimization.py
 0002: from typing import Callable, Tuple
 0003: import numpy as np
-0004: from ..config import AppConfig
+0004: from src.config import AppConfig
 0005: 
 0006: def newton_raphson(f: Callable, fprime: Callable, x0: float, 
 0007:                   tol: float = AppConfig.epsilon, 

@@ -22,8 +22,8 @@ from dataclasses import dataclass
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from ..utils.cache import Cache, cached
-from ..config import AppConfig
+from src.utils.cache import Cache, cached
+from src.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

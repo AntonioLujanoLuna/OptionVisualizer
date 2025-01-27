@@ -1,7 +1,7 @@
 # src/utils/optimization.py
 from typing import Callable, Tuple
 import numpy as np
-from ..config import AppConfig
+from src.config import AppConfig
 
 def newton_raphson(f: Callable, fprime: Callable, x0: float, 
                   tol: float = AppConfig.epsilon, 

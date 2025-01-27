@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
 from .analytics.portfolio_visualization import VisualizationConfig
-from ..models.base import OptionPricingModel
+from src.models.base import OptionPricingModel
 
 @dataclass
 class StrategyProfile:
