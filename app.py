@@ -1,6 +1,6 @@
 # src/app.py
 import streamlit as st
-from src.ui.option_visualizer import OptionVisualizerApp
+from .src.ui.option_visualizer import OptionVisualizerApp
 
 def main():
     app = OptionVisualizerApp()
