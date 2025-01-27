@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Tuple
 from scipy.stats import norm
 import logging
 
-from ..models.base import OptionPricingModel
-from ..config import AppConfig
+from src.models.base import OptionPricingModel
+from src.config import AppConfig
 
 @dataclass
 class RiskMetrics:
@@ -239,3 +239,232 @@ class RiskAnalyzer:
             stressed_positions.append(new_pos)
         
         return stressed_positions
+
+    # Continuing in src/analytics/volatility.py
+
+    def calculate_volatility_metrics(self, surface: VolatilitySurface) -> Dict[str, float]:
+        """
+        Calculate various volatility metrics from the surface.
+        
+        These metrics help understand the shape and characteristics of the 
+        volatility surface, which is crucial for:
+        1. Risk management - identifying potential volatility exposure
+        2. Trading opportunities - finding mispriced options
+        3. Market sentiment analysis - understanding market expectations
+        4. Stress testing - assessing portfolio behavior under vol changes
+        
+        The metrics include:
+        - Skewness measurements (volatility skew)
+        - Term structure metrics
+        - Overall surface curvature
+        - Arbitrage-free condition checks
+        """
+        metrics = {}
+        
+        # Calculate ATM volatility for each maturity
+        atm_volatilities = self._calculate_atm_volatilities(surface)
+        metrics['atm_term_structure'] = atm_volatilities
+        
+        # Calculate volatility skew (25-delta risk reversal)
+        skew_metrics = self._calculate_skew_metrics(surface)
+        metrics.update(skew_metrics)
+        
+        # Calculate butterfly spread (measure of curvature)
+        butterfly_metrics = self._calculate_butterfly_metrics(surface)
+        metrics.update(butterfly_metrics)
+        
+        # Calculate term structure metrics
+        term_metrics = self._calculate_term_structure_metrics(surface)
+        metrics.update(term_metrics)
+        
+        # Calculate surface smoothness and arbitrage-free metrics
+        quality_metrics = self._assess_surface_quality(surface)
+        metrics.update(quality_metrics)
+        
+        return metrics
+    
+    def _calculate_atm_volatilities(self, surface: VolatilitySurface) -> np.ndarray:
+        """
+        Calculate at-the-money volatilities for each expiry.
+        
+        ATM volatilities are crucial reference points as they:
+        1. Represent the market's base expectation of volatility
+        2. Are typically the most liquid points on the surface
+        3. Serve as anchors for interpolation and extrapolation
+        """
+        atm_vols = []
+        
+        for i, expiry in enumerate(surface.expiries):
+            # Find the strike closest to the forward price
+            forward = surface.forward_prices[i]
+            strike_idx = np.abs(surface.strikes - forward).argmin()
+            
+            # Get the ATM volatility
+            atm_vol = surface.volatilities[strike_idx, i]
+            atm_vols.append(atm_vol)
+        
+        return np.array(atm_vols)
+    
+    def _calculate_skew_metrics(self, surface: VolatilitySurface) -> Dict[str, np.ndarray]:
+        """
+        Calculate volatility skew metrics for each expiry.
+        
+        The volatility skew (also known as the smile or smirk) reflects:
+        1. Market's assessment of tail risk
+        2. Supply/demand imbalances for OTM options
+        3. Black-Scholes model violations in real markets
+        
+        We measure skew through several metrics:
+        - 25-delta risk reversal (difference between 25d call and put vols)
+        - Put-call volatility ratio
+        - Skew slope (rate of vol change with moneyness)
+        """
+        metrics = {}
+        
+        # Calculate 25-delta risk reversals
+        rr_25d = []
+        pc_ratio = []
+        skew_slope = []
+        
+        for i, expiry in enumerate(surface.expiries):
+            # Find approximate 25-delta strikes
+            forward = surface.forward_prices[i]
+            atm_vol = self._calculate_atm_volatilities(surface)[i]
+            
+            # Calculate strikes for approximately 25-delta options
+            # using a simplified delta approximation
+            T = expiry
+            call_25d_strike = forward * np.exp(0.5 * atm_vol * np.sqrt(T))
+            put_25d_strike = forward * np.exp(-0.5 * atm_vol * np.sqrt(T))
+            
+            # Find nearest strikes in our surface
+            call_idx = np.abs(surface.strikes - call_25d_strike).argmin()
+            put_idx = np.abs(surface.strikes - put_25d_strike).argmin()
+            
+            # Calculate risk reversal
+            call_vol = surface.volatilities[call_idx, i]
+            put_vol = surface.volatilities[put_idx, i]
+            rr_25d.append(call_vol - put_vol)
+            
+            # Calculate put-call vol ratio
+            pc_ratio.append(put_vol / call_vol)
+            
+            # Calculate average skew slope
+            moneyness = surface.strikes / forward
+            valid_idx = (moneyness >= 0.8) & (moneyness <= 1.2)
+            slope = np.polyfit(
+                moneyness[valid_idx],
+                surface.volatilities[valid_idx, i],
+                1
+            )[0]
+            skew_slope.append(slope)
+        
+        metrics['risk_reversal_25d'] = np.array(rr_25d)
+        metrics['put_call_vol_ratio'] = np.array(pc_ratio)
+        metrics['skew_slope'] = np.array(skew_slope)
+        
+        return metrics
+    
+    def _calculate_butterfly_metrics(self, surface: VolatilitySurface) -> Dict[str, np.ndarray]:
+        """
+        Calculate butterfly spread metrics for each expiry.
+        
+        The butterfly spread measures the curvature of the volatility smile:
+        1. Higher butterfly values indicate more pronounced smile shape
+        2. Changes in butterfly can signal changing market dynamics
+        3. Extreme butterfly values may indicate arbitrage opportunities
+        """
+        metrics = {}
+        
+        # Calculate 25-delta butterfly spreads
+        fly_25d = []
+        
+        for i, expiry in enumerate(surface.expiries):
+            forward = surface.forward_prices[i]
+            atm_vol = self._calculate_atm_volatilities(surface)[i]
+            
+            # Calculate strikes for approximately 25-delta options
+            T = expiry
+            call_25d_strike = forward * np.exp(0.5 * atm_vol * np.sqrt(T))
+            put_25d_strike = forward * np.exp(-0.5 * atm_vol * np.sqrt(T))
+            
+            # Find nearest strikes
+            call_idx = np.abs(surface.strikes - call_25d_strike).argmin()
+            put_idx = np.abs(surface.strikes - put_25d_strike).argmin()
+            atm_idx = np.abs(surface.strikes - forward).argmin()
+            
+            # Calculate butterfly spread
+            wing_vol = 0.5 * (
+                surface.volatilities[call_idx, i] +
+                surface.volatilities[put_idx, i]
+            )
+            center_vol = surface.volatilities[atm_idx, i]
+            fly_25d.append(wing_vol - center_vol)
+        
+        metrics['butterfly_25d'] = np.array(fly_25d)
+        
+        return metrics
+    
+    def _calculate_term_structure_metrics(self, surface: VolatilitySurface) -> Dict[str, float]:
+        """
+        Calculate metrics describing the volatility term structure.
+        
+        The term structure shows how implied volatility varies with expiry:
+        1. Short-term vs long-term vol expectations
+        2. Mean reversion assumptions
+        3. Impact of upcoming events (earnings, economic data, etc.)
+        """
+        atm_vols = self._calculate_atm_volatilities(surface)
+        
+        metrics = {
+            'short_term_vol': np.mean(atm_vols[surface.expiries <= 1/12]),  # 1 month
+            'medium_term_vol': np.mean(atm_vols[(surface.expiries > 1/12) & 
+                                               (surface.expiries <= 1/2)]),  # 1-6 months
+            'long_term_vol': np.mean(atm_vols[surface.expiries > 1/2]),     # >6 months
+            'term_structure_slope': np.polyfit(surface.expiries, atm_vols, 1)[0],
+            'vol_term_spread': atm_vols[-1] - atm_vols[0]  # Long - Short spread
+        }
+        
+        return metrics
+    
+    def _assess_surface_quality(self, surface: VolatilitySurface) -> Dict[str, float]:
+        """
+        Assess the quality and arbitrage-free properties of the vol surface.
+        
+        A high-quality volatility surface should:
+        1. Be free of static arbitrage (calendar and butterfly)
+        2. Be smooth and well-behaved
+        3. Have realistic relationships between strikes and maturities
+        4. Be consistent with market observations
+        """
+        metrics = {}
+        
+        # Check for calendar spread arbitrage
+        calendar_violations = 0
+        for i in range(len(surface.strikes)):
+            for j in range(len(surface.expiries)-1):
+                if surface.volatilities[i,j] < surface.volatilities[i,j+1]:
+                    calendar_violations += 1
+        
+        # Check for butterfly spread arbitrage
+        butterfly_violations = 0
+        for i in range(len(surface.expiries)):
+            for j in range(1, len(surface.strikes)-1):
+                left = surface.volatilities[j-1,i]
+                center = surface.volatilities[j,i]
+                right = surface.volatilities[j+1,i]
+                if center > 0.5 * (left + right):  # Convexity violation
+                    butterfly_violations += 1
+        
+        # Calculate surface smoothness
+        vol_gradients = np.gradient(surface.volatilities)
+        smoothness = np.mean(np.abs(vol_gradients))
+        
+        metrics.update({
+            'calendar_arbitrage_violations': calendar_violations,
+            'butterfly_arbitrage_violations': butterfly_violations,
+            'surface_smoothness': smoothness,
+            'surface_total_variance': np.var(surface.volatilities)
+        })
+        
+        return metrics

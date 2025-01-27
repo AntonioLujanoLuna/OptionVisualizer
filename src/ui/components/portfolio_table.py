@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 from typing import List
-from ...analytics.risk import Position
+from src.analytics.risk import Position # Relative import (still works within the same package)
 
 class PortfolioTable:
     """Interactive portfolio position display and management component."""

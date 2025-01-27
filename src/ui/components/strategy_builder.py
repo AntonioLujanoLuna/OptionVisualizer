@@ -1,5 +1,4 @@
 # src/ui/components/strategy_builder.py
-
 import streamlit as st
 from dataclasses import dataclass
 from typing import List, Optional

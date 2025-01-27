@@ -1,18 +1,23 @@
-# src/ui/app.py
-
+# src/ui/option_visualizer.py
 import streamlit as st
 from typing import Dict, List, Optional
 import plotly.graph_objects as go
-from datetime import datetime
 
-from ..models.black_scholes import BlackScholesModel
-from ..models.binomial import BinomialModel
-from ..models.monte_carlo import MonteCarloModel
-from ..analytics.portfolio_visualization import PortfolioVisualizer
-from ..analytics.strategy_visualization import StrategyVisualizer
-from ..analytics.volatility import RiskAnalyzer
-from .education import OptionsEducation
-from ..config import AppConfig
+from src.models.black_scholes import BlackScholesModel # Absolute import
+from src.models.binomial import BinomialModel # Absolute import
+from src.models.monte_carlo import MonteCarloModel # Absolute import
+from src.analytics.portfolio_visualization import PortfolioVisualizer # Absolute import
+from src.analytics.strategy_visualization import StrategyVisualizer # Absolute import
+from src.analytics.risk import RiskAnalyzer # Absolute import
+from src.analytics.volatility import VolatilitySurface # Absolute import
+from .education import OptionsEducation # Relative import (still works within the same package)
+from src.config import AppConfig # Absolute import
+from .pages.home import render_page as render_home
+from .pages.option_pricing import render_page as render_option_pricing
+from .pages.portfolio import render_page as render_portfolio
+from .pages.education import render_page as render_education
+from .pages.strategy_builder import render_page as render_strategy_builder
+
 
 class OptionVisualizerApp:
     """

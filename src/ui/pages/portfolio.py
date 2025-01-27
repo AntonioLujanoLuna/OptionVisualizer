@@ -3,10 +3,10 @@
 import streamlit as st
 import pandas as pd
 from typing import List
-from ..components.portfolio_table import PortfolioTable
-from ..components.charts import OptionPayoffChart
-from ...analytics.risk import Position, RiskAnalyzer
-from ...models.black_scholes import BlackScholesModel
+from src.ui.components.portfolio_table import PortfolioTable # Relative import (still works within the same package)
+from src.ui.components.charts import OptionPayoffChart # Relative import (still works within the same package)
+from src.analytics.risk import Position, RiskAnalyzer # Relative import (still works within the same package)
+from src.models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
 
 def render_page():
     """

@@ -1,4 +1,4 @@
-﻿// Python Files Concatenated on 01/27/2025 18:05:17
+﻿// Python Files Concatenated on 01/27/2025 18:18:51
 // ----------------------------------------
 
 
@@ -2190,382 +2190,16 @@
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\app.py
 // ----------------------------------------
-0001: """
-0002: app.py
-0003: 
-0004: An advanced Streamlit application for option pricing visualization and analysis.
-0005: Features:
-0006: - Multiple pricing models (Black-Scholes, Binomial, Monte Carlo)
-0007: - Interactive 2D and 3D visualizations
-0008: - Greeks analysis and visualization
-0009: - Volatility surface exploration
-0010: """
-0011: 
-0012: import streamlit as st
-0013: import numpy as np
-0014: import plotly.graph_objects as go
-0015: from plotly.subplots import make_subplots
-0016: import seaborn as sns
-0017: from datetime import datetime
-0018: 
-0019: from pricing_models import (
-0020:     option_price,
-0021:     black_scholes_greeks_call,
-0022:     black_scholes_greeks_put,
-0023:     implied_volatility_surface
-0024: )
-0025: from utils import fetch_market_data
-0026: 
-0027: # Visual Theme Configuration
-0028: COLORS = {
-0029:     'primary': '#2E86C1',
-0030:     'secondary': '#85C1E9',
-0031:     'accent': '#D4E6F1',
-0032:     'text': '#2C3E50',
-0033:     'background': '#F7F9F9',
-0034:     'success': '#27AE60',
-0035:     'warning': '#F39C12',
-0036:     'error': '#E74C3C'
-0037: }
-0038: 
-0039: def setup_page_config():
-0040:     """Configure the Streamlit page with custom settings and styling."""
-0041:     st.set_page_config(
-0042:         page_title="Advanced Option Pricing",
-0043:         layout="wide",
-0044:         initial_sidebar_state="expanded",
-0045:         menu_items={
-0046:             'Get Help': 'https://github.com/yourusername/option-pricing',
-0047:             'Report a bug': "https://github.com/yourusername/option-pricing/issues",
-0048:             'About': "# Option Pricing Visualizer\nAn interactive tool for understanding options."
-0049:         }
-0050:     )
-0051:     
-0052:     # Custom CSS for better visual appeal
-0053:     st.markdown("""
-0054:         <style>
-0055:         .stApp {
-0056:             background-color: #F7F9F9;
-0057:         }
-0058:         .stButton>button {
-0059:             background-color: #2E86C1;
-0060:             color: white;
-0061:             border-radius: 5px;
-0062:             padding: 0.5rem 1rem;
-0063:         }
-0064:         .stProgress .st-bo {
-0065:             background-color: #85C1E9;
-0066:         }
-0067:         .plot-container {
-0068:             background-color: white;
-0069:             padding: 1rem;
-0070:             border-radius: 10px;
-0071:             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-0072:         }
-0073:         </style>
-0074:     """, unsafe_allow_html=True)
-0075: 
-0076: def scenario_input_box(scenario_num=1, market_data=None):
-0077:     """Enhanced input box with market data integration and validation."""
-0078:     expander = st.expander(f"Scenario {scenario_num} Settings", expanded=True)
-0079:     
-0080:     with expander:
-0081:         col1, col2 = st.columns(2)
-0082:         
-0083:         with col1:
-0084:             S = st.number_input(
-0085:                 f"Spot Price (S{scenario_num})",
-0086:                 min_value=0.01,
-0087:                 max_value=10000.0,
-0088:                 value=100.0,
-0089:                 step=0.1,
-0090:                 key=f"S{scenario_num}"
-0091:             )
-0092:             
-0093:             if market_data and st.checkbox(f"Use Market Price ({market_data['price']:.2f})", key=f"use_market{scenario_num}"):
-0094:                 S = market_data['price']
-0095:             
-0096:             K = st.number_input(
-0097:                 f"Strike Price (K{scenario_num})",
-0098:                 min_value=0.01,
-0099:                 max_value=10000.0,
-0100:                 value=100.0,
-0101:                 step=0.1,
-0102:                 key=f"K{scenario_num}"
-0103:             )
-0104:             
-0105:             r = st.slider(
-0106:                 f"Risk-free Rate (r{scenario_num})",
-0107:                 min_value=0.0,
-0108:                 max_value=0.20,
-0109:                 value=0.05,
-0110:                 step=0.001,
-0111:                 key=f"r{scenario_num}"
-0112:             )
-0113:         
-0114:         with col2:
-0115:             sigma = st.number_input(
-0116:                 f"Volatility (σ{scenario_num})",
-0117:                 min_value=0.01,
-0118:                 max_value=2.0,
-0119:                 value=0.2,
-0120:                 step=0.01,
-0121:                 key=f"sigma{scenario_num}"
-0122:             )
-0123:             
-0124:             if market_data and st.checkbox(f"Use Market IV ({market_data['implied_volatility']:.2%})", key=f"use_iv{scenario_num}"):
-0125:                 sigma = market_data['implied_volatility']
-0126:             
-0127:             T = st.slider(
-0128:                 f"Time to Maturity (T{scenario_num})",
-0129:                 min_value=0.01,
-0130:                 max_value=5.0,
-0131:                 value=1.0,
-0132:                 step=0.01,
-0133:                 key=f"T{scenario_num}"
-0134:             )
-0135:         
-0136:         # Advanced parameters in a sub-expander
-0137:         with st.expander("Advanced Parameters"):
-0138:             col3, col4 = st.columns(2)
-0139:             with col3:
-0140:                 steps = st.number_input(
-0141:                     f"Binomial Steps",
-0142:                     min_value=10,
-0143:                     max_value=2000,
-0144:                     value=100,
-0145:                     step=10,
-0146:                     key=f"steps{scenario_num}"
-0147:                 )
-0148:             with col4:
-0149:                 sims = st.number_input(
-0150:                     f"Monte Carlo Simulations",
-0151:                     min_value=1000,
-0152:                     max_value=200000,
-0153:                     value=10000,
-0154:                     step=1000,
-0155:                     key=f"sims{scenario_num}"
-0156:                 )
-0157:     
-0158:     return S, K, r, sigma, T, steps, sims
-0159: 
-0160: def plot_option_prices(scenarios, model_choice, opt_type_choice, x_variable="spot"):
-0161:     """Generate an interactive plot comparing option prices across scenarios."""
-0162:     fig = go.Figure()
-0163:     
-0164:     for i, scenario in enumerate(scenarios, 1):
-0165:         S, K, r, sigma, T, steps, sims = scenario
-0166:         
-0167:         if x_variable == "spot":
-0168:             x_vals = np.linspace(max(1, 0.5 * S), 1.5 * S, 100)
-0169:             x_label = "Spot Price"
-0170:             current_x = S
-0171:         elif x_variable == "strike":
-0172:             x_vals = np.linspace(max(1, 0.5 * K), 1.5 * K, 100)
-0173:             x_label = "Strike Price"
-0174:             current_x = K
-0175:         else:  # time
-0176:             x_vals = np.linspace(0.01, 5.0, 100)
-0177:             x_label = "Time to Maturity"
-0178:             current_x = T
-0179:         
-0180:         for opt_type in (["call", "put"] if opt_type_choice == "Both" else [opt_type_choice.lower()]):
-0181:             prices = []
-0182:             for x in x_vals:
-0183:                 if x_variable == "spot":
-0184:                     price = option_price(x, K, r, sigma, T, opt_type, model_choice, steps, sims)
-0185:                 elif x_variable == "strike":
-0186:                     price = option_price(S, x, r, sigma, T, opt_type, model_choice, steps, sims)
-0187:                 else:
-0188:                     price = option_price(S, K, r, sigma, x, opt_type, model_choice, steps, sims)
-0189:                 prices.append(price)
-0190:             
-0191:             fig.add_trace(
-0192:                 go.Scatter(
-0193:                     x=x_vals,
-0194:                     y=prices,
-0195:                     name=f"Scenario {i} - {opt_type.title()}",
-0196:                     line=dict(
-0197:                         color=COLORS['primary'] if opt_type == "call" else COLORS['secondary'],
-0198:                         dash='solid' if i == 1 else 'dash'
-0199:                     )
-0200:                 )
-0201:             )
-0202:             
-0203:             # Add vertical line for current value
-0204:             fig.add_vline(
-0205:                 x=current_x,
-0206:                 line_dash="dot",
-0207:                 line_color=COLORS['accent'],
-0208:                 annotation_text=f"Current {x_variable.title()}"
-0209:             )
-0210:     
-0211:     fig.update_layout(
-0212:         title=f"{model_choice} Option Prices vs {x_label}",
-0213:         xaxis_title=x_label,
-0214:         yaxis_title="Option Price",
-0215:         template="plotly_white",
-0216:         hovermode="x unified",
-0217:         legend=dict(
-0218:             yanchor="top",
-0219:             y=0.99,
-0220:             xanchor="left",
-0221:             x=0.01
-0222:         )
-0223:     )
-0224:     
-0225:     return fig
-0226: 
-0227: def plot_greeks(scenario, opt_type):
-0228:     """Generate an interactive plot of option Greeks."""
-0229:     S, K, r, sigma, T, _, _ = scenario
-0230:     spot_range = np.linspace(max(1, 0.5 * S), 1.5 * S, 100)
-0231:     
-0232:     greeks_func = black_scholes_greeks_call if opt_type.lower() == "call" else black_scholes_greeks_put
-0233:     
-0234:     fig = make_subplots(
-0235:         rows=2, cols=2,
-0236:         subplot_titles=["Delta", "Gamma", "Theta", "Vega"],
-0237:         vertical_spacing=0.15
-0238:     )
-0239:     
-0240:     greek_values = {
-0241:         'Delta': [], 'Gamma': [], 'Theta': [], 'Vega': []
-0242:     }
-0243:     
-0244:     for s in spot_range:
-0245:         greeks = greeks_func(s, K, r, sigma, T)
-0246:         for greek in greek_values:
-0247:             greek_values[greek].append(greeks[greek])
-0248:     
-0249:     positions = {
-0250:         'Delta': (1, 1), 'Gamma': (1, 2),
-0251:         'Theta': (2, 1), 'Vega': (2, 2)
-0252:     }
-0253:     
-0254:     for greek, values in greek_values.items():
-0255:         row, col = positions[greek]
-0256:         fig.add_trace(
-0257:             go.Scatter(
-0258:                 x=spot_range,
-0259:                 y=values,
-0260:                 name=greek,
-0261:                 line=dict(color=COLORS['primary'])
-0262:             ),
-0263:             row=row, col=col
-0264:         )
-0265:     
-0266:     fig.update_layout(
-0267:         height=800,
-0268:         showlegend=False,
-0269:         template="plotly_white",
-0270:         title_text=f"Option Greeks ({opt_type})"
-0271:     )
-0272:     
-0273:     return fig
-0274: 
-0275: def main():
-0276:     """Main application function."""
-0277:     setup_page_config()
-0278:     
-0279:     # Title and Introduction
-0280:     st.markdown(
-0281:         "<h1 style='text-align: center; color: #2C3E50;'>Advanced Option Pricing Visualizer</h1>",
-0282:         unsafe_allow_html=True
-0283:     )
-0284:     
-0285:     st.markdown("""
-0286:         This tool provides interactive visualization and analysis of option pricing models.
-0287:         Compare different pricing methods, explore Greeks, and analyze volatility surfaces
-0288:         with real-time market data integration.
-0289:     """)
-0290:     
-0291:     # Sidebar Configuration
-0292:     st.sidebar.header("Configuration")
-0293:     
-0294:     # Market Data Integration
-0295:     ticker_symbol = st.sidebar.text_input("Stock Ticker (e.g., AAPL)", value="AAPL")
-0296:     market_data = None
-0297:     
-0298:     if st.sidebar.button("Fetch Market Data"):
-0299:         with st.spinner("Fetching market data..."):
-0300:             market_data = fetch_market_data(ticker_symbol)
-0301:             if market_data:
-0302:                 st.sidebar.success(f"Successfully fetched data for {ticker_symbol}")
-0303:             else:
-0304:                 st.sidebar.error("Failed to fetch market data")
-0305:     
-0306:     # Model Selection
-0307:     model_choice = st.sidebar.selectbox(
-0308:         "Pricing Model",
-0309:         ["Black-Scholes", "Binomial", "Monte Carlo"],
-0310:         help="Select the pricing model to use for calculations"
-0311:     )
-0312:     
-0313:     # Option Type
-0314:     opt_type_choice = st.sidebar.selectbox(
-0315:         "Option Type",
-0316:         ["Call", "Put", "Both"],
-0317:         help="Select which option type(s) to analyze"
-0318:     )
-0319:     
-0320:     # Analysis Mode
-0321:     analysis_mode = st.sidebar.selectbox(
-0322:         "Analysis Mode",
-0323:         ["Basic", "Advanced"],
-0324:         help="Basic mode shows price plots, Advanced includes Greeks and volatility surface"
-0325:     )
-0326:     
-0327:     # Main Content Area
-0328:     tab1, tab2, tab3 = st.tabs(["Price Analysis", "Greeks", "Volatility Surface"])
-0329:     
-0330:     with tab1:
-0331:         # Scenario Setup
-0332:         scenario1 = scenario_input_box(1, market_data)
-0333:         
-0334:         if st.checkbox("Add Second Scenario"):
-0335:             scenario2 = scenario_input_box(2, market_data)
-0336:             scenarios = [scenario1, scenario2]
-0337:         else:
-0338:             scenarios = [scenario1]
-0339:         
-0340:         # Variable to plot against
-0341:         x_variable = st.selectbox(
-0342:             "Plot Against",
-0343:             ["spot", "strike", "time"],
-0344:             format_func=lambda x: {"spot": "Spot Price", "strike": "Strike Price", "time": "Time to Maturity"}[x]
-0345:         )
-0346:         
-0347:         # Generate and display the main price plot
-0348:         price_fig = plot_option_prices(scenarios, model_choice, opt_type_choice, x_variable)
-0349:         st.plotly_chart(price_fig, use_container_width=True)
-0350:     
-0351:     with tab2:
-0352:         if model_choice == "Black-Scholes":
-0353:             st.plotly_chart(plot_greeks(scenario1, opt_type_choice), use_container_width=True)
-0354:         else:
-0355:             st.info("Greeks analysis is only available for the Black-Scholes model")
-0356:     
-0357:     with tab3:
-0358:         if analysis_mode == "Advanced":
-0359:             # Generate and display volatility surface
-0360:             surface_fig = implied_volatility_surface(scenario1[0], scenario1[1], scenario1[2])
-0361:             st.plotly_chart(surface_fig, use_container_width=True)
-0362:         else:
-0363:             st.info("Volatility surface analysis is available in Advanced mode")
-0364:     
-0365:     # Footer with additional information
-0366:     st.markdown("---")
-0367:     st.markdown("""
-0368:         ### Tips for Usage
-0369:         - Use the sidebar to configure the main parameters and analysis mode
-0370:         - Compare different scenarios by enabling the second scenario
-0371:         - Fetch real market data to compare theoretical prices with market values
-0372:         - Explore the Greeks and volatility surface in Advanced mode
-0373:     """)
-0374: 
-0375: if __name__ == "__main__":
-0376:     main()
+0001: # src/app.py
+0002: import streamlit as st
+0003: from ui.option_visualizer import OptionVisualizerApp
+0004: 
+0005: def main():
+0006:     app = OptionVisualizerApp()
+0007:     app.run()
+0008: 
+0009: if __name__ == "__main__":
+0010:     main()
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\config.py
 // ----------------------------------------
@@ -2627,574 +2261,6 @@
 0030:         """Calculate option Greeks."""
 0031:         pass
 0032: 
-0033: # src/models/black_scholes.py
-0034: import numpy as np
-0035: from scipy.stats import norm
-0036: from ..utils.validation import validate_parameters
-0037: from ..utils.decorators import memoize
-0038: from .base import OptionPricingModel, OptionResult
-0039: 
-0040: class BlackScholesModel(OptionPricingModel):
-0041:     """
-0042:     Implementation of the Black-Scholes option pricing model.
-0043:     
-0044:     This model provides analytical solutions for European option prices and Greeks
-0045:     under the following assumptions:
-0046:     1. The stock follows geometric Brownian motion
-0047:     2. No arbitrage opportunities
-0048:     3. Risk-free rate and volatility are constant
-0049:     4. European exercise only
-0050:     5. No dividends
-0051:     6. No transaction costs
-0052:     """
-0053:     
-0054:     @staticmethod
-0055:     def _d1(S: float, K: float, r: float, sigma: float, T: float) -> float:
-0056:         """Calculate d1 parameter of the Black-Scholes formula."""
-0057:         return (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
-0058:     
-0059:     @staticmethod
-0060:     def _d2(d1: float, sigma: float, T: float) -> float:
-0061:         """Calculate d2 parameter of the Black-Scholes formula."""
-0062:         return d1 - sigma * np.sqrt(T)
-0063:     
-0064:     @validate_parameters
-0065:     @memoize
-0066:     def price_call(self, S: float, K: float, r: float, sigma: float, T: float) -> OptionResult:
-0067:         """
-0068:         Calculate Black-Scholes price for a European call option.
-0069:         
-0070:         Args:
-0071:             S: Current stock price
-0072:             K: Strike price
-0073:             r: Risk-free interest rate (annualized)
-0074:             sigma: Volatility (annualized)
-0075:             T: Time to maturity (in years)
-0076:         
-0077:         Returns:
-0078:             OptionResult containing price and Greeks
-0079:         """
-0080:         if T <= 0:
-0081:             return OptionResult(max(S - K, 0))
-0082:         
-0083:         d1 = self._d1(S, K, r, sigma, T)
-0084:         d2 = self._d2(d1, sigma, T)
-0085:         
-0086:         price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
-0087:         greeks = self.calculate_greeks(S, K, r, sigma, T, "call")
-0088:         
-0089:         return OptionResult(price=price, greeks=greeks)
-0090:     
-0091:     @validate_parameters
-0092:     @memoize
-0093:     def price_put(self, S: float, K: float, r: float, sigma: float, T: float) -> OptionResult:
-0094:         """Calculate Black-Scholes price for a European put option."""
-0095:         if T <= 0:
-0096:             return OptionResult(max(K - S, 0))
-0097:         
-0098:         d1 = self._d1(S, K, r, sigma, T)
-0099:         d2 = self._d2(d1, sigma, T)
-0100:         
-0101:         price = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
-0102:         greeks = self.calculate_greeks(S, K, r, sigma, T, "put")
-0103:         
-0104:         return OptionResult(price=price, greeks=greeks)
-0105:     
-0106:     def calculate_greeks(self, S: float, K: float, r: float, sigma: float, T: float,
-0107:                         option_type: str = "call") -> Dict[str, float]:
-0108:         """Calculate all Greeks for the option."""
-0109:         if T <= 0:
-0110:             return {
-0111:                 "delta": 0.0, "gamma": 0.0, "theta": 0.0,
-0112:                 "vega": 0.0, "rho": 0.0
-0113:             }
-0114:         
-0115:         d1 = self._d1(S, K, r, sigma, T)
-0116:         d2 = self._d2(d1, sigma, T)
-0117:         sqrt_T = np.sqrt(T)
-0118:         
-0119:         sign = 1 if option_type.lower() == "call" else -1
-0120:         
-0121:         greeks = {
-0122:             "delta": sign * norm.cdf(sign * d1),
-0123:             "gamma": norm.pdf(d1) / (S * sigma * sqrt_T),
-0124:             "theta": (-S * norm.pdf(d1) * sigma / (2 * sqrt_T) -
-0125:                      sign * r * K * np.exp(-r * T) * norm.cdf(sign * d2)),
-0126:             "vega": S * sqrt_T * norm.pdf(d1),
-0127:             "rho": sign * K * T * np.exp(-r * T) * norm.cdf(sign * d2)
-0128:         }
-0129:         
-0130:         return greeks
-0131: 
-0132: # src/models/monte_carlo.py
-0133: import numpy as np
-0134: from typing import Optional, Tuple
-0135: from ..utils.validation import validate_parameters
-0136: from .base import OptionPricingModel, OptionResult
-0137: 
-0138: class MonteCarloModel(OptionPricingModel):
-0139:     """
-0140:     Monte Carlo simulation for option pricing with variance reduction techniques.
-0141:     
-0142:     Features:
-0143:     1. Standard Monte Carlo
-0144:     2. Antithetic variates for variance reduction
-0145:     3. Control variates using analytical Black-Scholes price
-0146:     4. Parallel execution for large simulations
-0147:     """
-0148:     
-0149:     def __init__(self, n_sims: int = 10000, n_steps: int = 100,
-0150:                  random_seed: Optional[int] = None):
-0151:         """Initialize Monte Carlo simulator."""
-0152:         self.n_sims = n_sims
-0153:         self.n_steps = n_steps
-0154:         if random_seed is not None:
-0155:             np.random.seed(random_seed)
-0156:     
-0157:     def _generate_paths(self, S: float, r: float, sigma: float,
-0158:                        T: float) -> np.ndarray:
-0159:         """Generate stock price paths using geometric Brownian motion."""
-0160:         dt = T/self.n_steps
-0161:         nudt = (r - 0.5 * sigma**2) * dt
-0162:         sigmasqrtdt = sigma * np.sqrt(dt)
-0163:         
-0164:         Z = np.random.standard_normal((self.n_sims, self.n_steps))
-0165:         paths = np.zeros((self.n_sims, self.n_steps + 1))
-0166:         paths[:, 0] = S
-0167:         
-0168:         for t in range(1, self.n_steps + 1):
-0169:             paths[:, t] = paths[:, t-1] * np.exp(nudt + sigmasqrtdt * Z[:, t-1])
-0170:         
-0171:         return paths
-0172:     
-0173:     @validate_parameters
-0174:     def price_call(self, S: float, K: float, r: float, sigma: float,
-0175:                    T: float) -> OptionResult:
-0176:         """Price a European call option using Monte Carlo simulation."""
-0177:         paths = self._generate_paths(S, r, sigma, T)
-0178:         payoffs = np.maximum(paths[:, -1] - K, 0)
-0179:         
-0180:         price = np.exp(-r * T) * np.mean(payoffs)
-0181:         std_error = np.exp(-r * T) * np.std(payoffs) / np.sqrt(self.n_sims)
-0182:         
-0183:         return OptionResult(
-0184:             price=price,
-0185:             error_estimate=std_error,
-0186:             additional_info={"n_sims": self.n_sims}
-0187:         )
-0188:     
-0189:     @validate_parameters
-0190:     def price_put(self, S: float, K: float, r: float, sigma: float,
-0191:                   T: float) -> OptionResult:
-0192:         """Price a European put option using Monte Carlo simulation."""
-0193:         paths = self._generate_paths(S, r, sigma, T)
-0194:         payoffs = np.maximum(K - paths[:, -1], 0)
-0195:         
-0196:         price = np.exp(-r * T) * np.mean(payoffs)
-0197:         std_error = np.exp(-r * T) * np.std(payoffs) / np.sqrt(self.n_sims)
-0198:         
-0199:         return OptionResult(
-0200:             price=price,
-0201:             error_estimate=std_error,
-0202:             additional_info={"n_sims": self.n_sims}
-0203:         )
-0204:     
-0205: # src/analytics/portfolio.py
-0206: from dataclasses import dataclass
-0207: from typing import List, Dict, Optional
-0208: import numpy as np
-0209: from ..models.base import OptionPricingModel
-0210: 
-0211: @dataclass
-0212: class Position:
-0213:     """Represents a single option position in a portfolio."""
-0214:     option_type: str  # "call" or "put"
-0215:     S: float  # Current stock price
-0216:     K: float  # Strike price
-0217:     r: float  # Risk-free rate
-0218:     sigma: float  # Volatility
-0219:     T: float  # Time to maturity
-0220:     quantity: float  # Number of contracts (negative for short positions)
-0221:     model: str = "Black-Scholes"  # Pricing model to use
-0222: 
-0223: @dataclass
-0224: class PortfolioRisk:
-0225:     """Contains portfolio-level risk metrics."""
-0226:     value: float
-0227:     delta: float
-0228:     gamma: float
-0229:     theta: float
-0230:     vega: float
-0231:     rho: float
-0232:     value_at_risk: float
-0233:     expected_shortfall: float
-0234:     stress_test_results: Dict[str, float]
-0235: 
-0236: class PortfolioAnalyzer:
-0237:     """
-0238:     Analyzes option portfolios for risk management and optimization.
-0239:     
-0240:     This class provides comprehensive portfolio analysis including:
-0241:     - Portfolio valuation
-0242:     - Aggregate Greeks calculation
-0243:     - Value at Risk (VaR) estimation
-0244:     - Expected Shortfall (ES) calculation
-0245:     - Stress testing under various scenarios
-0246:     - Risk attribution analysis
-0247:     """
-0248:     
-0249:     def __init__(self, pricing_model: OptionPricingModel):
-0250:         """Initialize with a specific pricing model."""
-0251:         self.pricing_model = pricing_model
-0252:     
-0253:     def calculate_portfolio_value(self, positions: List[Position]) -> float:
-0254:         """Calculate the total portfolio value."""
-0255:         total_value = 0.0
-0256:         
-0257:         for pos in positions:
-0258:             if pos.option_type.lower() == "call":
-0259:                 price = self.pricing_model.price_call(
-0260:                     pos.S, pos.K, pos.r, pos.sigma, pos.T
-0261:                 ).price
-0262:             else:
-0263:                 price = self.pricing_model.price_put(
-0264:                     pos.S, pos.K, pos.r, pos.sigma, pos.T
-0265:                 ).price
-0266:             
-0267:             total_value += price * pos.quantity
-0268:         
-0269:         return total_value
-0270:     
-0271:     def calculate_portfolio_greeks(self, positions: List[Position]) -> Dict[str, float]:
-0272:         """
-0273:         Calculate aggregate Greeks for the entire portfolio.
-0274:         
-0275:         This method accounts for:
-0276:         - Position direction (long/short)
-0277:         - Position size
-0278:         - Greek correlations between positions
-0279:         """
-0280:         portfolio_greeks = {
-0281:             "delta": 0.0,
-0282:             "gamma": 0.0,
-0283:             "theta": 0.0,
-0284:             "vega": 0.0,
-0285:             "rho": 0.0
-0286:         }
-0287:         
-0288:         for pos in positions:
-0289:             greeks = self.pricing_model.calculate_greeks(
-0290:                 pos.S, pos.K, pos.r, pos.sigma, pos.T, pos.option_type
-0291:             )
-0292:             
-0293:             for greek in portfolio_greeks:
-0294:                 portfolio_greeks[greek] += greeks[greek] * pos.quantity
-0295:         
-0296:         return portfolio_greeks
-0297:     
-0298:     def calculate_var(self, positions: List[Position], 
-0299:                      confidence_level: float = 0.95,
-0300:                      time_horizon: float = 1/252,  # One trading day
-0301:                      method: str = "historical") -> float:
-0302:         """
-0303:         Calculate Value at Risk using various methods.
-0304:         
-0305:         Methods available:
-0306:         - Historical simulation
-0307:         - Parametric VaR (using delta-normal approach)
-0308:         - Monte Carlo VaR
-0309:         """
-0310:         if method == "historical":
-0311:             return self._historical_var(positions, confidence_level, time_horizon)
-0312:         elif method == "parametric":
-0313:             return self._parametric_var(positions, confidence_level, time_horizon)
-0314:         else:
-0315:             return self._monte_carlo_var(positions, confidence_level, time_horizon)
-0316:     
-0317:     def _historical_var(self, positions: List[Position], 
-0318:                        confidence_level: float,
-0319:                        time_horizon: float) -> float:
-0320:         """Calculate VaR using historical simulation."""
-0321:         # Implementation uses actual historical data or simulated historical scenarios
-0322:         # to estimate potential losses
-0323:         portfolio_values = []
-0324:         scenarios = self._generate_historical_scenarios(252)  # One year of data
-0325:         
-0326:         for scenario in scenarios:
-0327:             value = 0
-0328:             for pos in positions:
-0329:                 # Adjust position parameters based on historical scenario
-0330:                 adjusted_pos = self._adjust_position_for_scenario(pos, scenario)
-0331:                 value += self.calculate_position_value(adjusted_pos)
-0332:             portfolio_values.append(value)
-0333:         
-0334:         return np.percentile(portfolio_values, (1 - confidence_level) * 100)
-0335:     
-0336:     def _parametric_var(self, positions: List[Position],
-0337:                        confidence_level: float,
-0338:                        time_horizon: float) -> float:
-0339:         """
-0340:         Calculate VaR using the delta-normal approach.
-0341:         
-0342:         This method:
-0343:         1. Uses portfolio Greeks to approximate value changes
-0344:         2. Assumes returns are normally distributed
-0345:         3. Scales by time horizon and confidence level
-0346:         """
-0347:         portfolio_delta = self.calculate_portfolio_greeks(positions)["delta"]
-0348:         portfolio_value = self.calculate_portfolio_value(positions)
-0349:         
-0350:         # Calculate portfolio volatility using position deltas and correlations
-0351:         portfolio_volatility = self._calculate_portfolio_volatility(positions)
-0352:         
-0353:         # Calculate VaR
-0354:         z_score = norm.ppf(1 - confidence_level)
-0355:         var = portfolio_value * z_score * portfolio_volatility * np.sqrt(time_horizon)
-0356:         
-0357:         return abs(var)
-0358:     
-0359:     def perform_stress_test(self, positions: List[Position],
-0360:                           scenarios: Dict[str, Dict[str, float]]) -> Dict[str, float]:
-0361:         """
-0362:         Perform stress testing under various market scenarios.
-0363:         
-0364:         Scenarios can include:
-0365:         - Market crashes (e.g., -20% in stock price)
-0366:         - Volatility spikes
-0367:         - Interest rate changes
-0368:         - Combined scenarios
-0369:         """
-0370:         results = {}
-0371:         base_value = self.calculate_portfolio_value(positions)
-0372:         
-0373:         for scenario_name, scenario_changes in scenarios.items():
-0374:             # Apply scenario changes to each position
-0375:             stressed_positions = [
-0376:                 self._adjust_position_for_scenario(pos, scenario_changes)
-0377:                 for pos in positions
-0378:             ]
-0379:             
-0380:             # Calculate new portfolio value under stress
-0381:             stressed_value = self.calculate_portfolio_value(stressed_positions)
-0382:             results[scenario_name] = stressed_value - base_value
-0383:         
-0384:         return results
-0385:     
-0386:     def _adjust_position_for_scenario(self, position: Position,
-0387:                                     scenario: Dict[str, float]) -> Position:
-0388:         """Apply scenario changes to a position's parameters."""
-0389:         new_pos = Position(
-0390:             option_type=position.option_type,
-0391:             S=position.S * (1 + scenario.get('price_change', 0)),
-0392:             K=position.K,
-0393:             r=position.r + scenario.get('rate_change', 0),
-0394:             sigma=position.sigma * (1 + scenario.get('vol_change', 0)),
-0395:             T=position.T,
-0396:             quantity=position.quantity
-0397:         )
-0398:         return new_pos
-0399:     
-0400:     def optimize_hedge(self, positions: List[Position],
-0401:                       target_greek: str = "delta",
-0402:                       target_value: float = 0.0) -> Optional[Position]:
-0403:         """
-0404:         Find the optimal hedging position to achieve a target Greek exposure.
-0405:         
-0406:         This method uses optimization to find the best hedging instrument
-0407:         and position size to achieve the desired risk profile.
-0408:         """
-0409:         current_greeks = self.calculate_portfolio_greeks(positions)
-0410:         current_exposure = current_greeks[target_greek]
-0411:         
-0412:         def objective_function(hedge_quantity: float) -> float:
-0413:             """Objective function for optimization."""
-0414:             hedge_position = Position(
-0415:                 option_type="call",  # Could be parameterized
-0416:                 S=positions[0].S,  # Use first position as reference
-0417:                 K=positions[0].S,  # At-the-money option
-0418:                 r=positions[0].r,
-0419:                 sigma=positions[0].sigma,
-0420:                 T=1/12,  # One month option
-0421:                 quantity=hedge_quantity
-0422:             )
-0423:             # Calculate new total exposure with hedge
-0424:             all_positions = positions + [hedge_position]
-0425:             new_greeks = self.calculate_portfolio_greeks(all_positions)
-0426:             new_exposure = new_greeks[target_greek]
-0427:             
-0428:             # Return absolute difference from target
-0429:             return abs(new_exposure - target_value)
-0430:         
-0431:         # Use scipy's minimize to find optimal hedge quantity
-0432:         from scipy.optimize import minimize
-0433:         result = minimize(
-0434:             objective_function,
-0435:             x0=0.0,  # Start with no hedge
-0436:             method='Nelder-Mead'
-0437:         )
-0438:         
-0439:         if result.success:
-0440:             # Return the optimal hedging position
-0441:             return Position(
-0442:                 option_type="call",
-0443:                 S=positions[0].S,
-0444:                 K=positions[0].S,
-0445:                 r=positions[0].r,
-0446:                 sigma=positions[0].sigma,
-0447:                 T=1/12,
-0448:                 quantity=result.x[0]
-0449:             )
-0450:         return None
-0451: 
-0452:     def calculate_expected_shortfall(self, positions: List[Position],
-0453:                                    confidence_level: float = 0.95,
-0454:                                    n_scenarios: int = 10000) -> float:
-0455:         """
-0456:         Calculate Expected Shortfall (ES), also known as Conditional Value at Risk (CVaR).
-0457:         
-0458:         ES measures the average loss beyond VaR, providing a more complete picture of tail risk.
-0459:         This implementation uses Monte Carlo simulation to estimate ES.
-0460:         """
-0461:         # Generate scenarios for Monte Carlo simulation
-0462:         scenarios = []
-0463:         for _ in range(n_scenarios):
-0464:             scenario_changes = {
-0465:                 'price_change': np.random.normal(0, 0.02),  # 2% daily volatility
-0466:                 'vol_change': np.random.normal(0, 0.05),    # 5% vol-of-vol
-0467:                 'rate_change': np.random.normal(0, 0.001)   # 0.1% rate change
-0468:             }
-0469:             scenarios.append(scenario_changes)
-0470:         
-0471:         # Calculate portfolio value under each scenario
-0472:         values = []
-0473:         base_value = self.calculate_portfolio_value(positions)
-0474:         
-0475:         for scenario in scenarios:
-0476:             stressed_positions = [
-0477:                 self._adjust_position_for_scenario(pos, scenario)
-0478:                 for pos in positions
-0479:             ]
-0480:             scenario_value = self.calculate_portfolio_value(stressed_positions)
-0481:             values.append(scenario_value - base_value)
-0482:         
-0483:         # Sort values and calculate ES
-0484:         sorted_values = np.sort(values)
-0485:         cutoff_index = int(n_scenarios * (1 - confidence_level))
-0486:         return -np.mean(sorted_values[:cutoff_index])
-0487: 
-0488:     def risk_attribution(self, positions: List[Position]) -> Dict[str, Dict[str, float]]:
-0489:         """
-0490:         Perform risk attribution analysis to understand sources of portfolio risk.
-0491:         
-0492:         This method breaks down risk contributions by:
-0493:         1. Individual positions
-0494:         2. Risk factors (delta, vega, etc.)
-0495:         3. Underlying assets
-0496:         """
-0497:         attribution = {}
-0498:         total_value = self.calculate_portfolio_value(positions)
-0499:         
-0500:         # Calculate position-level metrics
-0501:         for i, pos in enumerate(positions):
-0502:             pos_greeks = self.pricing_model.calculate_greeks(
-0503:                 pos.S, pos.K, pos.r, pos.sigma, pos.T, pos.option_type
-0504:             )
-0505:             pos_value = self.calculate_position_value(pos)
-0506:             
-0507:             attribution[f"Position_{i+1}"] = {
-0508:                 "value_contribution": pos_value / total_value,
-0509:                 "delta_contribution": pos_greeks["delta"] * pos.quantity,
-0510:                 "gamma_contribution": pos_greeks["gamma"] * pos.quantity,
-0511:                 "vega_contribution": pos_greeks["vega"] * pos.quantity,
-0512:                 "theta_contribution": pos_greeks["theta"] * pos.quantity
-0513:             }
-0514:         
-0515:         return attribution
-0516: 
-0517:     def sensitivity_analysis(self, positions: List[Position],
-0518:                            parameters: List[str] = None) -> Dict[str, Dict[str, float]]:
-0519:         """
-0520:         Perform sensitivity analysis to understand portfolio behavior under parameter changes.
-0521:         
-0522:         This method examines how the portfolio value and risk metrics change when
-0523:         key parameters (spot, volatility, rates) are perturbed.
-0524:         """
-0525:         if parameters is None:
-0526:             parameters = ["spot", "volatility", "rate", "time"]
-0527:         
-0528:         results = {}
-0529:         base_value = self.calculate_portfolio_value(positions)
-0530:         
-0531:         # Define parameter perturbations
-0532:         perturbations = {
-0533:             "spot": [0.95, 1.05],        # ±5% spot move
-0534:             "volatility": [0.8, 1.2],    # ±20% vol move
-0535:             "rate": [-0.01, 0.01],       # ±100bps rate move
-0536:             "time": [-1/365, 1/365]      # ±1 day
-0537:         }
-0538:         
-0539:         for param in parameters:
-0540:             param_results = {}
-0541:             
-0542:             for perturb in perturbations[param]:
-0543:                 # Create stressed positions with perturbed parameter
-0544:                 stressed_positions = self._perturb_positions(positions, param, perturb)
-0545:                 stressed_value = self.calculate_portfolio_value(stressed_positions)
-0546:                 param_results[f"{perturb:.2f}"] = stressed_value - base_value
-0547:             
-0548:             results[param] = param_results
-0549:         
-0550:         return results
-0551: 
-0552:     def _perturb_positions(self, positions: List[Position], 
-0553:                           parameter: str, 
-0554:                           perturbation: float) -> List[Position]:
-0555:         """Helper method to create perturbed positions for sensitivity analysis."""
-0556:         perturbed = []
-0557:         
-0558:         for pos in positions:
-0559:             new_pos = Position(
-0560:                 option_type=pos.option_type,
-0561:                 S=pos.S * (1 + perturbation if parameter == "spot" else 1),
-0562:                 K=pos.K,
-0563:                 r=pos.r + (perturbation if parameter == "rate" else 0),
-0564:                 sigma=pos.sigma * (1 + perturbation if parameter == "volatility" else 1),
-0565:                 T=max(0, pos.T + (perturbation if parameter == "time" else 0)),
-0566:                 quantity=pos.quantity
-0567:             )
-0568:             perturbed.append(new_pos)
-0569:         
-0570:         return perturbed
-0571: 
-0572:     def generate_risk_report(self, positions: List[Position]) -> Dict[str, Any]:
-0573:         """
-0574:         Generate a comprehensive risk report for the portfolio.
-0575:         
-0576:         This report includes:
-0577:         1. Portfolio valuation
-0578:         2. Risk metrics (Greeks, VaR, ES)
-0579:         3. Stress test results
-0580:         4. Risk attribution
-0581:         5. Sensitivity analysis
-0582:         """
-0583:         report = {
-0584:             "timestamp": datetime.now().isoformat(),
-0585:             "portfolio_value": self.calculate_portfolio_value(positions),
-0586:             "greeks": self.calculate_portfolio_greeks(positions),
-0587:             "risk_metrics": {
-0588:                 "var_95": self.calculate_var(positions, 0.95),
-0589:                 "expected_shortfall": self.calculate_expected_shortfall(positions),
-0590:             },
-0591:             "stress_tests": self.perform_stress_test(positions, {
-0592:                 "market_crash": {"price_change": -0.20},
-0593:                 "vol_spike": {"vol_change": 1.0},
-0594:                 "rate_hike": {"rate_change": 0.01}
-0595:             }),
-0596:             "risk_attribution": self.risk_attribution(positions),
-0597:             "sensitivity": self.sensitivity_analysis(positions)
-0598:         }
-0599:         
-0600:         return report
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\models\binomial.py
 // ----------------------------------------
@@ -3447,6 +2513,374 @@
 0247:             "vega": vega,
 0248:             "rho": rho
 0249:         }
+
+// File: C:\Users\aluja\Desktop\OptionVisualizer\src\models\black_scholes.py
+// ----------------------------------------
+0001: # src/models/black_scholes.py
+0002: 
+0003: import numpy as np
+0004: from typing import Dict, Optional
+0005: from dataclasses import dataclass
+0006: import logging
+0007: from scipy.stats import norm
+0008: 
+0009: from .base import OptionPricingModel, OptionResult
+0010: from ..utils.validation import validate_parameters
+0011: from ..config import AppConfig
+0012: 
+0013: @dataclass
+0014: class BlackScholesParameters:
+0015:     """Parameters used in the Black-Scholes model."""
+0016:     S: float      # Current stock price
+0017:     K: float      # Strike price
+0018:     r: float      # Risk-free interest rate
+0019:     sigma: float  # Volatility of the underlying asset
+0020:     T: float      # Time to maturity in years
+0021:     q: float      # Dividend yield
+0022: 
+0023: class BlackScholesModel(OptionPricingModel):
+0024:     """
+0025:     Black-Scholes analytical model for European option pricing.
+0026:     
+0027:     This implementation provides:
+0028:     1. Pricing for European call and put options.
+0029:     2. Analytical calculation of Greeks: Delta, Gamma, Theta, Vega, and Rho.
+0030:     3. Handling of dividend yields.
+0031:     4. Robust parameter validation and error handling.
+0032:     
+0033:     The Black-Scholes model offers closed-form solutions for option prices and Greeks,
+0034:     making it highly efficient for European-style options on non-dividend-paying or
+0035:     dividend-paying assets.
+0036:     """
+0037:     
+0038:     def __init__(self, 
+0039:                  q: float = 0.0, 
+0040:                  logging_enabled: bool = True):
+0041:         """
+0042:             Initialize the Black-Scholes model with optional dividend yield.
+0043:             
+0044:             Parameters:
+0045:             - q: Dividend yield of the underlying asset (default is 0.0).
+0046:             - logging_enabled: Enable or disable logging (default is True).
+0047:         """
+0048:         self.q = q
+0049:         self.logger = logging.getLogger(__name__)
+0050:         if logging_enabled:
+0051:             self.logger.setLevel(logging.INFO)
+0052:         else:
+0053:             self.logger.setLevel(logging.WARNING)
+0054:     
+0055:     @validate_parameters
+0056:     def price_call(self, S: float, K: float, r: float, sigma: float, T: float,
+0057:                    q: Optional[float] = None) -> OptionResult:
+0058:         """
+0059:         Price a European call option using the Black-Scholes formula.
+0060:         
+0061:         Parameters:
+0062:         - S: Current stock price
+0063:         - K: Strike price
+0064:         - r: Risk-free interest rate
+0065:         - sigma: Volatility of the underlying asset
+0066:         - T: Time to maturity in years
+0067:         - q: Dividend yield (optional, defaults to model's q)
+0068:         
+0069:         Returns:
+0070:         - OptionResult containing the price, Greeks, and additional information.
+0071:         """
+0072:         q = self.q if q is None else q
+0073:         params = BlackScholesParameters(S, K, r, sigma, T, q)
+0074:         self.logger.info(f"Pricing European Call with parameters: {params}")
+0075:         
+0076:         d1, d2 = self._calculate_d1_d2(params)
+0077:         call_price = (S * np.exp(-q * T) * norm.cdf(d1)) - (K * np.exp(-r * T) * norm.cdf(d2))
+0078:         
+0079:         greeks = self._calculate_greeks(d1, d2, params)
+0080:         
+0081:         return OptionResult(
+0082:             price=call_price,
+0083:             greeks=greeks,
+0084:             error_estimate=None,  # Analytical model has no simulation error
+0085:             additional_info={
+0086:                 "model": "Black-Scholes",
+0087:                 "parameters": params
+0088:             }
+0089:         )
+0090:     
+0091:     @validate_parameters
+0092:     def price_put(self, S: float, K: float, r: float, sigma: float, T: float,
+0093:                  q: Optional[float] = None) -> OptionResult:
+0094:         """
+0095:         Price a European put option using the Black-Scholes formula.
+0096:         
+0097:         Parameters:
+0098:         - S: Current stock price
+0099:         - K: Strike price
+0100:         - r: Risk-free interest rate
+0101:         - sigma: Volatility of the underlying asset
+0102:         - T: Time to maturity in years
+0103:         - q: Dividend yield (optional, defaults to model's q)
+0104:         
+0105:         Returns:
+0106:         - OptionResult containing the price, Greeks, and additional information.
+0107:         """
+0108:         q = self.q if q is None else q
+0109:         params = BlackScholesParameters(S, K, r, sigma, T, q)
+0110:         self.logger.info(f"Pricing European Put with parameters: {params}")
+0111:         
+0112:         d1, d2 = self._calculate_d1_d2(params)
+0113:         put_price = (K * np.exp(-r * T) * norm.cdf(-d2)) - (S * np.exp(-q * T) * norm.cdf(-d1))
+0114:         
+0115:         greeks = self._calculate_greeks(d1, d2, params)
+0116:         
+0117:         return OptionResult(
+0118:             price=put_price,
+0119:             greeks=greeks,
+0120:             error_estimate=None,  # Analytical model has no simulation error
+0121:             additional_info={
+0122:                 "model": "Black-Scholes",
+0123:                 "parameters": params
+0124:             }
+0125:         )
+0126:     
+0127:     def _calculate_d1_d2(self, params: BlackScholesParameters) -> Tuple[float, float]:
+0128:         """
+0129:         Calculate the d1 and d2 parameters used in the Black-Scholes formula.
+0130:         
+0131:         Parameters:
+0132:         - params: BlackScholesParameters dataclass instance.
+0133:         
+0134:         Returns:
+0135:         - A tuple containing d1 and d2.
+0136:         """
+0137:         if params.T <= 0:
+0138:             raise ValueError("Time to maturity must be positive.")
+0139:         
+0140:         d1 = (np.log(params.S / params.K) + (params.r - params.q + 0.5 * params.sigma**2) * params.T) / \
+0141:              (params.sigma * np.sqrt(params.T))
+0142:         d2 = d1 - params.sigma * np.sqrt(params.T)
+0143:         
+0144:         self.logger.debug(f"Calculated d1: {d1}, d2: {d2}")
+0145:         return d1, d2
+0146:     
+0147:     def _calculate_greeks(self, d1: float, d2: float, params: BlackScholesParameters) -> Dict[str, float]:
+0148:         """
+0149:         Calculate the Greeks for the option.
+0150:         
+0151:         Parameters:
+0152:         - d1: Calculated d1 from Black-Scholes formula
+0153:         - d2: Calculated d2 from Black-Scholes formula
+0154:         - params: BlackScholesParameters dataclass instance.
+0155:         
+0156:         Returns:
+0157:         - Dictionary containing Delta, Gamma, Theta, Vega, and Rho.
+0158:         """
+0159:         delta = np.exp(-params.q * params.T) * norm.cdf(d1) if params.option_type == "call" else \
+0160:                 np.exp(-params.q * params.T) * (norm.cdf(d1) - 1)
+0161:         gamma = (np.exp(-params.q * params.T) * norm.pdf(d1)) / (params.S * params.sigma * np.sqrt(params.T))
+0162:         theta_call = (- (params.S * params.sigma * np.exp(-params.q * params.T) * norm.pdf(d1)) / (2 * np.sqrt(params.T)) 
+0163:                       - params.q * params.S * np.exp(-params.q * params.T) * norm.cdf(d1) 
+0164:                       + params.q * params.K * np.exp(-params.r * params.T) * norm.cdf(d2))
+0165:         theta_put = (- (params.S * params.sigma * np.exp(-params.q * params.T) * norm.pdf(d1)) / (2 * np.sqrt(params.T)) 
+0166:                      + params.q * params.S * np.exp(-params.q * params.T) * norm.cdf(-d1) 
+0167:                      - params.r * params.K * np.exp(-params.r * params.T) * norm.cdf(-d2))
+0168:         vega = params.S * np.exp(-params.q * params.T) * norm.pdf(d1) * np.sqrt(params.T)
+0169:         rho_call = params.K * params.T * np.exp(-params.r * params.T) * norm.cdf(d2)
+0170:         rho_put = -params.K * params.T * np.exp(-params.r * params.T) * norm.cdf(-d2)
+0171:         
+0172:         greeks = {
+0173:             "delta": self._calculate_delta(params.option_type, d1, params),
+0174:             "gamma": gamma,
+0175:             "theta": self._calculate_theta(params.option_type, params, d1, d2),
+0176:             "vega": vega,
+0177:             "rho": self._calculate_rho(params.option_type, params, d2)
+0178:         }
+0179:         
+0180:         self.logger.debug(f"Calculated Greeks: {greeks}")
+0181:         return greeks
+0182:     
+0183:     def _calculate_delta(self, option_type: str, d1: float, params: BlackScholesParameters) -> float:
+0184:         """
+0185:         Calculate Delta for the option.
+0186:         
+0187:         Parameters:
+0188:         - option_type: 'call' or 'put'
+0189:         - d1: Calculated d1 from Black-Scholes formula
+0190:         - params: BlackScholesParameters dataclass instance.
+0191:         
+0192:         Returns:
+0193:         - Delta value.
+0194:         """
+0195:         if option_type.lower() == "call":
+0196:             delta = np.exp(-params.q * params.T) * norm.cdf(d1)
+0197:         else:
+0198:             delta = np.exp(-params.q * params.T) * (norm.cdf(d1) - 1)
+0199:         self.logger.debug(f"Calculated Delta: {delta}")
+0200:         return delta
+0201:     
+0202:     def _calculate_theta(self, option_type: str, params: BlackScholesParameters, d1: float, d2: float) -> float:
+0203:         """
+0204:         Calculate Theta for the option.
+0205:         
+0206:         Parameters:
+0207:         - option_type: 'call' or 'put'
+0208:         - params: BlackScholesParameters dataclass instance.
+0209:         - d1: Calculated d1 from Black-Scholes formula
+0210:         - d2: Calculated d2 from Black-Scholes formula
+0211:         
+0212:         Returns:
+0213:         - Theta value.
+0214:         """
+0215:         term1 = -(params.S * params.sigma * np.exp(-params.q * params.T) * norm.pdf(d1)) / (2 * np.sqrt(params.T))
+0216:         if option_type.lower() == "call":
+0217:             term2 = -params.q * params.S * np.exp(-params.q * params.T) * norm.cdf(d1)
+0218:             term3 = params.q * params.K * np.exp(-params.r * params.T) * norm.cdf(d2)
+0219:             theta = term1 + term2 + term3
+0220:         else:
+0221:             term2 = params.q * params.S * np.exp(-params.q * params.T) * norm.cdf(-d1)
+0222:             term3 = -params.r * params.K * np.exp(-params.r * params.T) * norm.cdf(-d2)
+0223:             theta = term1 + term2 + term3
+0224:         self.logger.debug(f"Calculated Theta: {theta}")
+0225:         return theta
+0226:     
+0227:     def _calculate_rho(self, option_type: str, params: BlackScholesParameters, d2: float) -> float:
+0228:         """
+0229:         Calculate Rho for the option.
+0230:         
+0231:         Parameters:
+0232:         - option_type: 'call' or 'put'
+0233:         - params: BlackScholesParameters dataclass instance.
+0234:         - d2: Calculated d2 from Black-Scholes formula
+0235:         
+0236:         Returns:
+0237:         - Rho value.
+0238:         """
+0239:         if option_type.lower() == "call":
+0240:             rho = params.K * params.T * np.exp(-params.r * params.T) * norm.cdf(d2)
+0241:         else:
+0242:             rho = -params.K * params.T * np.exp(-params.r * params.T) * norm.cdf(-d2)
+0243:         self.logger.debug(f"Calculated Rho: {rho}")
+0244:         return rho
+0245:     
+0246:     def _calculate_vega(self, params: BlackScholesParameters, d1: float) -> float:
+0247:         """
+0248:         Calculate Vega for the option.
+0249:         
+0250:         Parameters:
+0251:         - params: BlackScholesParameters dataclass instance.
+0252:         - d1: Calculated d1 from Black-Scholes formula
+0253:         
+0254:         Returns:
+0255:         - Vega value.
+0256:         """
+0257:         vega = params.S * np.exp(-params.q * params.T) * norm.pdf(d1) * np.sqrt(params.T)
+0258:         self.logger.debug(f"Calculated Vega: {vega}")
+0259:         return vega
+0260:     
+0261:     def calculate_greeks(self, S: float, K: float, r: float, sigma: float,
+0262:                         T: float, option_type: str = "call",
+0263:                         q: Optional[float] = None) -> Dict[str, float]:
+0264:         """
+0265:         Calculate option Greeks analytically.
+0266:         
+0267:         Parameters:
+0268:         - S: Current stock price
+0269:         - K: Strike price
+0270:         - r: Risk-free interest rate
+0271:         - sigma: Volatility of the underlying asset
+0272:         - T: Time to maturity in years
+0273:         - option_type: 'call' or 'put'
+0274:         - q: Dividend yield (optional, defaults to model's q)
+0275:         
+0276:         Returns:
+0277:         - Dictionary containing Delta, Gamma, Theta, Vega, and Rho.
+0278:         """
+0279:         q = self.q if q is None else q
+0280:         params = BlackScholesParameters(S, K, r, sigma, T, q)
+0281:         d1, d2 = self._calculate_d1_d2(params)
+0282:         greeks = self._calculate_greeks(d1, d2, params)
+0283:         return greeks
+0284:     
+0285:     @validate_parameters
+0286:     def implied_volatility(self, option_price: float, S: float, K: float, r: float, T: float,
+0287:                            option_type: str = "call", q: Optional[float] = None,
+0288:                            initial_guess: float = 0.2, tol: float = 1e-6,
+0289:                            max_iterations: int = 100) -> Optional[float]:
+0290:         """
+0291:         Calculate the implied volatility using the Black-Scholes model via the Newton-Raphson method.
+0292:         
+0293:         Parameters:
+0294:         - option_price: Observed market price of the option
+0295:         - S: Current stock price
+0296:         - K: Strike price
+0297:         - r: Risk-free interest rate
+0298:         - T: Time to maturity in years
+0299:         - option_type: 'call' or 'put'
+0300:         - q: Dividend yield (optional, defaults to model's q)
+0301:         - initial_guess: Initial guess for volatility (default is 0.2)
+0302:         - tol: Tolerance for convergence (default is 1e-6)
+0303:         - max_iterations: Maximum number of iterations (default is 100)
+0304:         
+0305:         Returns:
+0306:         - Implied volatility if converged, else None.
+0307:         """
+0308:         q = self.q if q is None else q
+0309:         sigma = initial_guess
+0310:         for i in range(max_iterations):
+0311:             params = BlackScholesParameters(S, K, r, sigma, T, q)
+0312:             try:
+0313:                 if option_type.lower() == "call":
+0314:                     model_price = self.price_call(S, K, r, sigma, T, q).price
+0315:                 else:
+0316:                     model_price = self.price_put(S, K, r, sigma, T, q).price
+0317:             except Exception as e:
+0318:                 self.logger.error(f"Error in pricing during implied volatility calculation: {e}")
+0319:                 return None
+0320:             
+0321:             # Vega for Newton-Raphson
+0322:             d1, _ = self._calculate_d1_d2(params)
+0323:             vega = self._calculate_vega(params, d1)
+0324:             
+0325:             price_diff = model_price - option_price
+0326:             self.logger.debug(f"Iteration {i}: sigma={sigma}, price_diff={price_diff}, vega={vega}")
+0327:             
+0328:             if abs(price_diff) < tol:
+0329:                 self.logger.info(f"Converged to implied volatility: {sigma} in {i} iterations.")
+0330:                 return sigma
+0331:             
+0332:             if vega == 0:
+0333:                 self.logger.warning("Vega is zero. Cannot continue Newton-Raphson.")
+0334:                 return None
+0335:             
+0336:             sigma -= price_diff / vega
+0337:         
+0338:         self.logger.warning("Implied volatility did not converge.")
+0339:         return None
+0340:     
+0341:     @validate_parameters
+0342:     def price_option(self, S: float, K: float, r: float, sigma: float, T: float,
+0343:                     option_type: str = "call", q: Optional[float] = None) -> OptionResult:
+0344:         """
+0345:         General method to price an option based on the option type.
+0346:         
+0347:         Parameters:
+0348:         - S: Current stock price
+0349:         - K: Strike price
+0350:         - r: Risk-free interest rate
+0351:         - sigma: Volatility of the underlying asset
+0352:         - T: Time to maturity in years
+0353:         - option_type: 'call' or 'put'
+0354:         - q: Dividend yield (optional, defaults to model's q)
+0355:         
+0356:         Returns:
+0357:         - OptionResult containing the price, Greeks, and additional information.
+0358:         """
+0359:         option_type = option_type.lower()
+0360:         if option_type == "call":
+0361:             return self.price_call(S, K, r, sigma, T, q)
+0362:         elif option_type == "put":
+0363:             return self.price_put(S, K, r, sigma, T, q)
+0364:         else:
+0365:             raise ValueError("option_type must be 'call' or 'put'")
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\models\monte_carlo.py
 // ----------------------------------------
@@ -3753,924 +3187,6 @@
 0301:                 "paths_shape": paths.shape
 0302:             }
 0303:         )
-
-// File: C:\Users\aluja\Desktop\OptionVisualizer\src\pricing_models.py
-// ----------------------------------------
-0001: """
-0002: pricing_models.py
-0003: 
-0004: Enhanced implementation of option pricing models including:
-0005: 1. Black-Scholes (calls & puts) with complete Greeks
-0006: 2. Binomial (Cox-Ross-Rubinstein) with American option support
-0007: 3. Monte Carlo with variance reduction
-0008: 4. Implied volatility calculations
-0009: 5. Volatility surface generation
-0010: 
-0011: This module provides a comprehensive suite of option pricing tools with educational
-0012: comments and clear documentation to help understand the mathematical concepts behind
-0013: option pricing.
-0014: """
-0015: 
-0016: import math
-0017: import numpy as np
-0018: from scipy.stats import norm
-0019: import plotly.graph_objects as go
-0020: from dataclasses import dataclass
-0021: from typing import Dict, List, Optional, Tuple, Union
-0022: from scipy.optimize import minimize
-0023: 
-0024: # Constants for numerical stability and optimization
-0025: EPSILON = 1e-8
-0026: MAX_ITERATIONS = 1000
-0027: 
-0028: @dataclass
-0029: class OptionGreeks:
-0030:     """Container for option Greeks calculations."""
-0031:     delta: float
-0032:     gamma: float
-0033:     theta: float
-0034:     vega: float
-0035:     rho: float
-0036:     charm: Optional[float] = None  # Delta decay
-0037:     vanna: Optional[float] = None  # Delta-volatility sensitivity
-0038:     volga: Optional[float] = None  # Vega convexity
-0039: 
-0040: class BlackScholesModel:
-0041:     """
-0042:     Implementation of the Black-Scholes option pricing model.
-0043:     
-0044:     The Black-Scholes model assumes:
-0045:     1. The stock follows geometric Brownian motion
-0046:     2. No arbitrage opportunities
-0047:     3. Risk-free rate and volatility are constant
-0048:     4. European exercise only
-0049:     5. No dividends
-0050:     6. No transaction costs
-0051:     """
-0052:     
-0053:     @staticmethod
-0054:     def _d1(S: float, K: float, r: float, sigma: float, T: float) -> float:
-0055:         """Calculate the d1 parameter in the Black-Scholes formula."""
-0056:         if T <= 0 or sigma <= 0:
-0057:             raise ValueError("Time to maturity and volatility must be positive")
-0058:         return (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
-0059:     
-0060:     @staticmethod
-0061:     def _d2(d1: float, sigma: float, T: float) -> float:
-0062:         """Calculate the d2 parameter in the Black-Scholes formula."""
-0063:         return d1 - sigma * np.sqrt(T)
-0064:     
-0065:     @classmethod
-0066:     def price_call(cls, S: float, K: float, r: float, sigma: float, T: float) -> float:
-0067:         """
-0068:         Calculate the Black-Scholes price for a European call option.
-0069:         
-0070:         Parameters:
-0071:             S: Current stock price
-0072:             K: Strike price
-0073:             r: Risk-free interest rate (annualized)
-0074:             sigma: Volatility (annualized)
-0075:             T: Time to maturity (in years)
-0076:         
-0077:         Returns:
-0078:             float: Call option price
-0079:         """
-0080:         if T <= 0:
-0081:             return max(S - K, 0.0)
-0082:         
-0083:         d1 = cls._d1(S, K, r, sigma, T)
-0084:         d2 = cls._d2(d1, sigma, T)
-0085:         
-0086:         return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
-0087:     
-0088:     @classmethod
-0089:     def price_put(cls, S: float, K: float, r: float, sigma: float, T: float) -> float:
-0090:         """
-0091:         Calculate the Black-Scholes price for a European put option using put-call parity.
-0092:         
-0093:         Put-call parity states: C - P = S - K*exp(-rT)
-0094:         Therefore: P = C - S + K*exp(-rT)
-0095:         """
-0096:         if T <= 0:
-0097:             return max(K - S, 0.0)
-0098:         
-0099:         call_price = cls.price_call(S, K, r, sigma, T)
-0100:         return call_price - S + K * np.exp(-r * T)
-0101:     
-0102:     @classmethod
-0103:     def calculate_greeks(cls, S: float, K: float, r: float, sigma: float, T: float, 
-0104:                         option_type: str = "call") -> OptionGreeks:
-0105:         """
-0106:         Calculate all Greeks for a given option.
-0107:         
-0108:         Includes first-order, second-order, and cross-Greeks for comprehensive risk analysis.
-0109:         """
-0110:         if T <= 0:
-0111:             return OptionGreeks(0.0, 0.0, 0.0, 0.0, 0.0)
-0112:         
-0113:         d1 = cls._d1(S, K, r, sigma, T)
-0114:         d2 = cls._d2(d1, sigma, T)
-0115:         sqrt_T = np.sqrt(T)
-0116:         
-0117:         # Common terms
-0118:         nd1 = norm.pdf(d1)
-0119:         Nd1 = norm.cdf(d1)
-0120:         Nd2 = norm.cdf(d2)
-0121:         exp_rt = np.exp(-r * T)
-0122:         
-0123:         if option_type.lower() == "put":
-0124:             # Adjust for put option
-0125:             Nd1 = Nd1 - 1
-0126:             Nd2 = Nd2 - 1
-0127:         
-0128:         # First-order Greeks
-0129:         delta = Nd1
-0130:         gamma = nd1 / (S * sigma * sqrt_T)
-0131:         theta = (-S * nd1 * sigma / (2 * sqrt_T) - 
-0132:                 r * K * exp_rt * Nd2)
-0133:         vega = S * sqrt_T * nd1
-0134:         rho = K * T * exp_rt * Nd2
-0135:         
-0136:         # Second-order and cross-Greeks
-0137:         charm = -nd1 * (2*r*T - d2*sigma*sqrt_T) / (2*T*sigma*sqrt_T)
-0138:         vanna = -nd1 * d2 / sigma
-0139:         volga = vega * d1 * d2 / sigma
-0140:         
-0141:         return OptionGreeks(
-0142:             delta=delta,
-0143:             gamma=gamma,
-0144:             theta=theta,
-0145:             vega=vega,
-0146:             rho=rho,
-0147:             charm=charm,
-0148:             vanna=vanna,
-0149:             volga=volga
-0150:         )
-0151: 
-0152: class BinomialModel:
-0153:     """
-0154:     Implementation of the Cox-Ross-Rubinstein binomial tree model.
-0155:     
-0156:     Supports both European and American exercise styles, and can be used
-0157:     to price options on stocks with known discrete dividends.
-0158:     """
-0159:     
-0160:     @staticmethod
-0161:     def _calculate_parameters(sigma: float, T: float, steps: int) -> Tuple[float, float, float]:
-0162:         """Calculate the basic parameters for the binomial tree."""
-0163:         dt = T / steps
-0164:         u = np.exp(sigma * np.sqrt(dt))
-0165:         d = 1/u
-0166:         p = (np.exp(r * dt) - d) / (u - d)  # Risk-neutral probability
-0167:         return dt, u, d, p
-0168:     
-0169:     @classmethod
-0170:     def price_option(cls, S: float, K: float, r: float, sigma: float, T: float,
-0171:                     steps: int = 100, option_type: str = "call",
-0172:                     exercise: str = "european") -> float:
-0173:         """
-0174:         Price an option using the binomial tree model.
-0175:         
-0176:         Parameters:
-0177:             exercise: 'european' or 'american'
-0178:         """
-0179:         dt, u, d, p = cls._calculate_parameters(sigma, T, steps)
-0180:         discount = np.exp(-r * dt)
-0181:         
-0182:         # Initialize asset prices at final nodes
-0183:         prices = np.array([S * u**j * d**(steps-j) for j in range(steps+1)])
-0184:         
-0185:         # Initialize option values at final nodes
-0186:         if option_type.lower() == "call":
-0187:             values = np.maximum(prices - K, 0)
-0188:         else:
-0189:             values = np.maximum(K - prices, 0)
-0190:         
-0191:         # Backward induction through the tree
-0192:         for i in range(steps-1, -1, -1):
-0193:             prices = prices[:-1]  # Asset prices one step earlier
-0194:             values = discount * (p * values[1:] + (1-p) * values[:-1])
-0195:             
-0196:             if exercise.lower() == "american":
-0197:                 # Check for early exercise
-0198:                 if option_type.lower() == "call":
-0199:                     values = np.maximum(values, prices - K)
-0200:                 else:
-0201:                     values = np.maximum(values, K - prices)
-0202:         
-0203:         return values[0]
-0204: 
-0205: class MonteCarloModel:
-0206:     """
-0207:     Monte Carlo simulation for option pricing with variance reduction techniques.
-0208:     
-0209:     Implements:
-0210:     1. Standard Monte Carlo
-0211:     2. Antithetic variates
-0212:     3. Control variates
-0213:     4. Stratified sampling
-0214:     """
-0215:     
-0216:     @staticmethod
-0217:     def _generate_paths(S: float, r: float, sigma: float, T: float, 
-0218:                        steps: int, sims: int) -> np.ndarray:
-0219:         """Generate stock price paths using geometric Brownian motion."""
-0220:         dt = T/steps
-0221:         nudt = (r - 0.5 * sigma**2) * dt
-0222:         sigmasqrtdt = sigma * np.sqrt(dt)
-0223:         
-0224:         # Generate random standard normal variables
-0225:         Z = np.random.standard_normal((sims, steps))
-0226:         
-0227:         # Initialize price paths array
-0228:         paths = np.zeros((sims, steps+1))
-0229:         paths[:, 0] = S
-0230:         
-0231:         # Generate paths
-0232:         for t in range(1, steps+1):
-0233:             paths[:, t] = paths[:, t-1] * np.exp(nudt + sigmasqrtdt * Z[:, t-1])
-0234:         
-0235:         return paths
-0236:     
-0237:     @classmethod
-0238:     def price_option(cls, S: float, K: float, r: float, sigma: float, T: float,
-0239:                     steps: int = 100, sims: int = 10000, option_type: str = "call",
-0240:                     variance_reduction: str = "antithetic") -> Tuple[float, float]:
-0241:         """
-0242:         Price an option using Monte Carlo simulation with variance reduction.
-0243:         
-0244:         Returns:
-0245:             Tuple[float, float]: (option_price, standard_error)
-0246:         """
-0247:         if variance_reduction == "antithetic":
-0248:             # Generate antithetic pairs of paths
-0249:             paths1 = cls._generate_paths(S, r, sigma, T, steps, sims//2)
-0250:             Z = np.random.standard_normal((sims//2, steps))
-0251:             paths2 = cls._generate_paths(S, r, sigma, T, steps, sims//2, -Z)
-0252:             
-0253:             # Combine paths
-0254:             final_prices = np.concatenate([paths1[:, -1], paths2[:, -1]])
-0255:         else:
-0256:             paths = cls._generate_paths(S, r, sigma, T, steps, sims)
-0257:             final_prices = paths[:, -1]
-0258:         
-0259:         # Calculate payoffs
-0260:         if option_type.lower() == "call":
-0261:             payoffs = np.maximum(final_prices - K, 0)
-0262:         else:
-0263:             payoffs = np.maximum(K - final_prices, 0)
-0264:         
-0265:         # Discount payoffs
-0266:         discount = np.exp(-r * T)
-0267:         option_price = discount * np.mean(payoffs)
-0268:         std_error = discount * np.std(payoffs) / np.sqrt(sims)
-0269:         
-0270:         return option_price, std_error
-0271: 
-0272: def implied_volatility(price: float, S: float, K: float, r: float, T: float,
-0273:                       option_type: str = "call", sigma_init: float = 0.3) -> float:
-0274:     """
-0275:     Calculate implied volatility using the Newton-Raphson method.
-0276:     
-0277:     Args:
-0278:         price: Market price of the option
-0279:         sigma_init: Initial guess for implied volatility
-0280:     
-0281:     Returns:
-0282:         float: Implied volatility that reproduces the market price
-0283:     """
-0284:     def objective(sigma):
-0285:         if option_type.lower() == "call":
-0286:             model_price = BlackScholesModel.price_call(S, K, r, sigma, T)
-0287:         else:
-0288:             model_price = BlackScholesModel.price_put(S, K, r, sigma, T)
-0289:         return model_price - price
-0290:     
-0291:     result = minimize(lambda x: abs(objective(x)), sigma_init,
-0292:                      method='Nelder-Mead', options={'maxiter': MAX_ITERATIONS})
-0293:     
-0294:     if not result.success:
-0295:         raise ValueError("Failed to converge to implied volatility")
-0296:     
-0297:     return result.x[0]
-0298: 
-0299: def implied_volatility_surface(S: float, r: float, T_range: np.ndarray,
-0300:                              moneyness_range: np.ndarray,
-0301:                              market_vols: np.ndarray) -> go.Figure:
-0302:     """
-0303:     Generate and plot an implied volatility surface.
-0304:     
-0305:     Args:
-0306:         T_range: Array of times to maturity
-0307:         moneyness_range: Array of K/S ratios
-0308:         market_vols: 2D array of market-observed volatilities
-0309:     
-0310:     Returns:
-0311:         plotly.graph_objects.Figure: Interactive 3D surface plot
-0312:     """
-0313:     # Create mesh grid for 3D plot
-0314:     T_mesh, M_mesh = np.meshgrid(T_range, moneyness_range)
-0315:     
-0316:     # Create the 3D surface plot
-0317:     fig = go.Figure(data=[go.Surface(
-0318:         x=T_mesh,
-0319:         y=M_mesh,
-0320:         z=market_vols,
-0321:         colorscale='Viridis'
-0322:     )])
-0323:     
-0324:     # Update layout for better visualization
-0325:     fig.update_layout(
-0326:         title='Implied Volatility Surface',
-0327:         scene=dict(
-0328:             xaxis_title='Time to Maturity',
-0329:             yaxis_title='Moneyness (K/S)',
-0330:             zaxis_title='Implied Volatility'
-0331:         ),
-0332:         width=800,
-0333:         height=800
-0334:     )
-0335:     
-0336:     return fig
-0337: 
-0338: # Unified interface for option pricing
-0339: def option_price(S: float, K: float, r: float, sigma: float, T: float,
-0340:                 option_type: str = "call", model: str = "Black-Scholes",
-0341:                 steps: int = 100, sims: int = 10000) -> float:
-0342:     """
-0343:     Unified interface for pricing options using any available model.
-0344:     
-0345:     Args:
-0346:         model: One of "Black-Scholes", "Binomial", or "Monte Carlo"
-0347:     
-0348:     Returns:
-0349:         float: Option price according to the specified model
-0350:     """
-0351:     model = model.lower().replace("-", "").replace(" ", "")
-0352:     option_type = option_type.lower()
-0353:     
-0354:     if model == "blackscholes":
-0355:         if option_type == "call":
-0356:             return BlackScholesModel.price_call(S, K, r, sigma, T)
-0357:         else:
-0358:             return BlackScholesModel.price_put(S, K, r, sigma, T)
-0359:     
-0360:     elif model == "binomial":
-0361:         return BinomialModel.price_option(
-0362:             S, K, r, sigma, T, steps, option_type)
-0363:     
-0364:     elif model == "montecarlo":
-0365:         price, _ = MonteCarloModel.price_option(
-0366:             S, K, r, sigma, T, steps, sims, option_type)
-0367:         return price
-0368:     
-0369:     else:
-0370:         raise ValueError(f"Unknown model: {model}")
-0371: 
-0372: def black_scholes_greeks_call(S: float, K: float, r: float, sigma: float, T: float) -> Dict[str, float]:
-0373:     """
-0374:     Calculate Greeks for a call option using Black-Scholes model.
-0375:     
-0376:     Args:
-0377:         S: Current stock price
-0378:         K: Strike price
-0379:         r: Risk-free rate (annualized)
-0380:         sigma: Volatility (annualized)
-0381:         T: Time to maturity (in years)
-0382:         
-0383:     Returns:
-0384:         Dictionary containing all Greeks values
-0385:     """
-0386:     if T <= 0:
-0387:         return {
-0388:             'delta': 1.0 if S > K else 0.0,
-0389:             'gamma': 0.0,
-0390:             'theta': 0.0,
-0391:             'vega': 0.0,
-0392:             'rho': 0.0
-0393:         }
-0394:     
-0395:     # Calculate d1 and d2
-0396:     sqrt_T = np.sqrt(T)
-0397:     d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
-0398:     d2 = d1 - sigma * sqrt_T
-0399:     
-0400:     # Common terms
-0401:     nd1 = norm.pdf(d1)
-0402:     Nd1 = norm.cdf(d1)
-0403:     Nd2 = norm.cdf(d2)
-0404:     exp_rt = np.exp(-r * T)
-0405:     
-0406:     # Calculate Greeks
-0407:     delta = Nd1
-0408:     gamma = nd1 / (S * sigma * sqrt_T)
-0409:     theta = (-S * nd1 * sigma / (2 * sqrt_T) -
-0410:              r * K * exp_rt * Nd2)
-0411:     vega = S * sqrt_T * nd1
-0412:     rho = K * T * exp_rt * Nd2
-0413:     
-0414:     return {
-0415:         'delta': delta,
-0416:         'gamma': gamma,
-0417:         'theta': theta,
-0418:         'vega': vega,
-0419:         'rho': rho
-0420:     }
-0421: 
-0422: def black_scholes_greeks_put(S: float, K: float, r: float, sigma: float, T: float) -> Dict[str, float]:
-0423:     """
-0424:     Calculate Greeks for a put option using Black-Scholes model.
-0425:     
-0426:     Args:
-0427:         S: Current stock price
-0428:         K: Strike price
-0429:         r: Risk-free rate (annualized)
-0430:         sigma: Volatility (annualized)
-0431:         T: Time to maturity (in years)
-0432:         
-0433:     Returns:
-0434:         Dictionary containing all Greeks values
-0435:     """
-0436:     if T <= 0:
-0437:         return {
-0438:             'delta': -1.0 if S < K else 0.0,
-0439:             'gamma': 0.0,
-0440:             'theta': 0.0,
-0441:             'vega': 0.0,
-0442:             'rho': 0.0
-0443:         }
-0444:     
-0445:     # Calculate d1 and d2
-0446:     sqrt_T = np.sqrt(T)
-0447:     d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
-0448:     d2 = d1 - sigma * sqrt_T
-0449:     
-0450:     # Common terms
-0451:     nd1 = norm.pdf(d1)
-0452:     Nd1 = norm.cdf(-d1)  # Note the negative d1 for puts
-0453:     Nd2 = norm.cdf(-d2)  # Note the negative d2 for puts
-0454:     exp_rt = np.exp(-r * T)
-0455:     
-0456:     # Calculate Greeks
-0457:     delta = -Nd1  # Negative of the call delta
-0458:     gamma = nd1 / (S * sigma * sqrt_T)  # Same as call
-0459:     theta = (-S * nd1 * sigma / (2 * sqrt_T) +
-0460:              r * K * exp_rt * Nd2)
-0461:     vega = S * sqrt_T * nd1  # Same as call
-0462:     rho = -K * T * exp_rt * Nd2  # Negative of call rho
-0463:     
-0464:     return {
-0465:         'delta': delta,
-0466:         'gamma': gamma,
-0467:         'theta': theta,
-0468:         'vega': vega,
-0469:         'rho': rho
-0470:     }
-
-// File: C:\Users\aluja\Desktop\OptionVisualizer\src\ui\app.py
-// ----------------------------------------
-0001: # src/ui/app.py
-0002: 
-0003: import streamlit as st
-0004: from typing import Dict, List, Optional
-0005: import plotly.graph_objects as go
-0006: from datetime import datetime
-0007: 
-0008: from ..models.black_scholes import BlackScholesModel
-0009: from ..models.binomial import BinomialModel
-0010: from ..models.monte_carlo import MonteCarloModel
-0011: from ..analytics.portfolio_visualization import PortfolioVisualizer
-0012: from ..analytics.strategy_visualization import StrategyVisualizer
-0013: from ..analytics.volatility import VolatilityAnalyzer
-0014: from .education import OptionsEducation
-0015: from ..config import AppConfig
-0016: 
-0017: class OptionVisualizerApp:
-0018:     """
-0019:     Main application class for the Option Pricing Visualizer.
-0020:     
-0021:     This class orchestrates the entire application, providing:
-0022:     1. Clean, intuitive UI layout
-0023:     2. Interactive model parameter inputs
-0024:     3. Real-time visualization updates
-0025:     4. Educational content integration
-0026:     5. Advanced analytics features
-0027:     """
-0028:     
-0029:     def __init__(self):
-0030:         """Initialize application components and state."""
-0031:         # Initialize pricing models
-0032:         self.black_scholes = BlackScholesModel()
-0033:         self.binomial = BinomialModel()
-0034:         self.monte_carlo = MonteCarloModel()
-0035:         
-0036:         # Initialize visualization components
-0037:         self.portfolio_viz = PortfolioVisualizer()
-0038:         self.strategy_viz = StrategyVisualizer(self.black_scholes)
-0039:         self.vol_analyzer = VolatilityAnalyzer(self.black_scholes)
-0040:         
-0041:         # Initialize educational content
-0042:         self.education = OptionsEducation()
-0043:         
-0044:         # Set page configuration
-0045:         st.set_page_config(
-0046:             page_title="Option Pricing Visualizer",
-0047:             layout="wide",
-0048:             initial_sidebar_state="expanded"
-0049:         )
-0050:         
-0051:         # Apply custom styling
-0052:         self._apply_custom_styling()
-0053:     
-0054:     def run(self):
-0055:         """Main application entry point."""
-0056:         # Display header and introduction
-0057:         self._render_header()
-0058:         
-0059:         # Create main navigation
-0060:         tab_options = [
-0061:             "Option Pricing",
-0062:             "Strategy Builder",
-0063:             "Portfolio Analysis",
-0064:             "Volatility Analysis",
-0065:             "Learning Center"
-0066:         ]
-0067:         
-0068:         selected_tab = st.sidebar.radio("Navigation", tab_options)
-0069:         
-0070:         # Render selected tab content
-0071:         if selected_tab == "Option Pricing":
-0072:             self._render_pricing_tab()
-0073:         elif selected_tab == "Strategy Builder":
-0074:             self._render_strategy_tab()
-0075:         elif selected_tab == "Portfolio Analysis":
-0076:             self._render_portfolio_tab()
-0077:         elif selected_tab == "Volatility Analysis":
-0078:             self._render_volatility_tab()
-0079:         else:  # Learning Center
-0080:             self._render_learning_tab()
-0081:     
-0082:     def _render_header(self):
-0083:         """Render application header with title and introduction."""
-0084:         st.markdown(
-0085:             """
-0086:             <h1 style='text-align: center;'>Option Pricing Visualizer</h1>
-0087:             
-0088:             <p style='text-align: center; font-size: 1.2em;'>
-0089:             An interactive tool for understanding option pricing, strategies, and risk management
-0090:             </p>
-0091:             """,
-0092:             unsafe_allow_html=True
-0093:         )
-0094:         
-0095:         with st.expander("About this Tool", expanded=False):
-0096:             st.markdown(
-0097:                 """
-0098:                 This tool helps you understand options through:
-0099:                 - Interactive pricing model comparisons
-0100:                 - Visual strategy analysis
-0101:                 - Portfolio risk assessment
-0102:                 - Educational content and tutorials
-0103:                 
-0104:                 Start by selecting a section from the sidebar navigation.
-0105:                 """
-0106:             )
-0107:     
-0108:     def _render_pricing_tab(self):
-0109:         """Render the option pricing analysis tab."""
-0110:         st.header("Option Pricing Analysis")
-0111:         
-0112:         # Create two columns for input parameters
-0113:         col1, col2 = st.columns(2)
-0114:         
-0115:         with col1:
-0116:             # Basic parameters
-0117:             st.subheader("Option Parameters")
-0118:             underlying_price = st.number_input(
-0119:                 "Underlying Price",
-0120:                 min_value=1.0,
-0121:                 value=100.0,
-0122:                 step=1.0,
-0123:                 help="Current price of the underlying asset"
-0124:             )
-0125:             
-0126:             strike_price = st.number_input(
-0127:                 "Strike Price",
-0128:                 min_value=1.0,
-0129:                 value=100.0,
-0130:                 step=1.0,
-0131:                 help="Strike price of the option"
-0132:             )
-0133:             
-0134:             time_to_expiry = st.slider(
-0135:                 "Time to Expiry (Years)",
-0136:                 min_value=0.1,
-0137:                 max_value=2.0,
-0138:                 value=1.0,
-0139:                 step=0.1,
-0140:                 help="Time until option expiration in years"
-0141:             )
-0142:         
-0143:         with col2:
-0144:             # Market parameters
-0145:             st.subheader("Market Parameters")
-0146:             volatility = st.slider(
-0147:                 "Volatility",
-0148:                 min_value=0.1,
-0149:                 max_value=1.0,
-0150:                 value=0.2,
-0151:                 step=0.05,
-0152:                 help="Annualized volatility"
-0153:             )
-0154:             
-0155:             risk_free_rate = st.slider(
-0156:                 "Risk-free Rate",
-0157:                 min_value=0.0,
-0158:                 max_value=0.1,
-0159:                 value=0.05,
-0160:                 step=0.01,
-0161:                 help="Annual risk-free interest rate"
-0162:             )
-0163:         
-0164:         # Model selection and comparison
-0165:         st.subheader("Model Selection")
-0166:         models = st.multiselect(
-0167:             "Select Models to Compare",
-0168:             ["Black-Scholes", "Binomial", "Monte Carlo"],
-0169:             default=["Black-Scholes"]
-0170:         )
-0171:         
-0172:         option_type = st.radio(
-0173:             "Option Type",
-0174:             ["Call", "Put"],
-0175:             horizontal=True
-0176:         )
-0177:         
-0178:         if not models:
-0179:             st.warning("Please select at least one model to analyze.")
-0180:             return
-0181:         
-0182:         # Calculate and display results
-0183:         results = self._calculate_model_results(
-0184:             models,
-0185:             underlying_price,
-0186:             strike_price,
-0187:             time_to_expiry,
-0188:             volatility,
-0189:             risk_free_rate,
-0190:             option_type.lower()
-0191:         )
-0192:         
-0193:         self._display_pricing_results(results)
-0194:         
-0195:         # Display interactive visualizations
-0196:         st.subheader("Visual Analysis")
-0197:         visualization_type = st.selectbox(
-0198:             "Select Visualization",
-0199:             ["Price vs. Underlying", "Greeks Profile", "Time Decay"]
-0200:         )
-0201:         
-0202:         self._display_pricing_visualization(
-0203:             visualization_type,
-0204:             results,
-0205:             underlying_price,
-0206:             strike_price
-0207:         )
-0208:     
-0209:     def _calculate_model_results(self, models: List[str], S: float, K: float,
-0210:                                T: float, sigma: float, r: float,
-0211:                                option_type: str) -> Dict[str, float]:
-0212:         """Calculate option prices and Greeks using selected models."""
-0213:         results = {}
-0214:         
-0215:         for model in models:
-0216:             if model == "Black-Scholes":
-0217:                 if option_type == "call":
-0218:                     result = self.black_scholes.price_call(S, K, r, sigma, T)
-0219:                 else:
-0220:                     result = self.black_scholes.price_put(S, K, r, sigma, T)
-0221:             elif model == "Binomial":
-0222:                 result = self.binomial.price_option(
-0223:                     S, K, r, sigma, T,
-0224:                     option_type=option_type,
-0225:                     exercise="european"
-0226:                 )
-0227:             else:  # Monte Carlo
-0228:                 if option_type == "call":
-0229:                     result = self.monte_carlo.price_call(S, K, r, sigma, T)
-0230:                 else:
-0231:                     result = self.monte_carlo.price_put(S, K, r, sigma, T)
-0232:             
-0233:             results[model] = result
-0234:         
-0235:         return results
-0236:     
-0237:     def _display_pricing_results(self, results: Dict[str, float]):
-0238:         """Display pricing results in a clear, organized manner."""
-0239:         st.subheader("Pricing Results")
-0240:         
-0241:         # Create columns for each model
-0242:         cols = st.columns(len(results))
-0243:         
-0244:         for col, (model, result) in zip(cols, results.items()):
-0245:             with col:
-0246:                 st.metric(
-0247:                     label=f"{model} Price",
-0248:                     value=f"${result.price:.2f}"
-0249:                 )
-0250:                 
-0251:                 if result.greeks:
-0252:                     st.markdown("#### Greeks")
-0253:                     for greek, value in result.greeks.items():
-0254:                         st.metric(greek.capitalize(), f"{value:.4f}")
-0255:     
-0256:     def _display_pricing_visualization(self, viz_type: str, results: Dict,
-0257:                                     current_price: float, strike: float):
-0258:         """Create and display interactive pricing visualizations."""
-0259:         # Implementation of visualization logic...
-0260:         pass
-0261: 
-0262:     def _render_strategy_tab(self):
-0263:         """Render the strategy builder and analysis tab."""
-0264:         st.header("Options Strategy Builder")
-0265:         
-0266:         # Strategy selection or custom builder
-0267:         strategy_mode = st.radio(
-0268:             "Strategy Mode",
-0269:             ["Pre-defined Strategies", "Custom Strategy Builder"],
-0270:             horizontal=True
-0271:         )
-0272:         
-0273:         if strategy_mode == "Pre-defined Strategies":
-0274:             strategy = st.selectbox(
-0275:                 "Select Strategy",
-0276:                 [
-0277:                     "Bull Call Spread",
-0278:                     "Bear Put Spread",
-0279:                     "Iron Condor",
-0280:                     "Butterfly Spread",
-0281:                     "Calendar Spread",
-0282:                     "Straddle",
-0283:                     "Strangle"
-0284:                 ]
-0285:             )
-0286:             
-0287:             # Display strategy information
-0288:             st.markdown(self.education.get_strategy_description(strategy))
-0289:             
-0290:             # Strategy parameters
-0291:             col1, col2 = st.columns(2)
-0292:             with col1:
-0293:                 underlying_price = st.number_input(
-0294:                     "Underlying Price",
-0295:                     min_value=1.0,
-0296:                     value=100.0,
-0297:                     step=1.0
-0298:                 )
-0299:                 
-0300:                 width = st.slider(
-0301:                     "Strategy Width",
-0302:                     min_value=5,
-0303:                     max_value=50,
-0304:                     value=10,
-0305:                     step=5,
-0306:                     help="Distance between strikes in the strategy"
-0307:                 )
-0308:             
-0309:             with col2:
-0310:                 expiry = st.slider(
-0311:                     "Days to Expiration",
-0312:                     min_value=7,
-0313:                     max_value=365,
-0314:                     value=30,
-0315:                     step=7
-0316:                 )
-0317:                 
-0318:                 size = st.number_input(
-0319:                     "Position Size (contracts)",
-0320:                     min_value=1,
-0321:                     value=1,
-0322:                     step=1
-0323:                 )
-0324:             
-0325:             # Generate and display strategy analysis
-0326:             strategy_profile = self._generate_strategy_profile(
-0327:                 strategy,
-0328:                 underlying_price,
-0329:                 width,
-0330:                 expiry,
-0331:                 size
-0332:             )
-0333:             
-0334:             self._display_strategy_analysis(strategy_profile)
-0335:             
-0336:         else:  # Custom Strategy Builder
-0337:             st.subheader("Build Custom Strategy")
-0338:             
-0339:             # Initialize or get existing legs
-0340:             if 'strategy_legs' not in st.session_state:
-0341:                 st.session_state.strategy_legs = []
-0342:             
-0343:             # Add new leg form
-0344:             with st.expander("Add Strategy Leg", expanded=True):
-0345:                 col1, col2 = st.columns(2)
-0346:                 
-0347:                 with col1:
-0348:                     option_type = st.selectbox(
-0349:                         "Option Type",
-0350:                         ["Call", "Put"],
-0351:                         key="new_leg_type"
-0352:                     )
-0353:                     
-0354:                     position = st.radio(
-0355:                         "Position",
-0356:                         ["Long", "Short"],
-0357:                         horizontal=True,
-0358:                         key="new_leg_position"
-0359:                     )
-0360:                 
-0361:                 with col2:
-0362:                     strike = st.number_input(
-0363:                         "Strike Price",
-0364:                         min_value=1.0,
-0365:                         value=100.0,
-0366:                         step=1.0,
-0367:                         key="new_leg_strike"
-0368:                     )
-0369:                     
-0370:                     quantity = st.number_input(
-0371:                         "Quantity",
-0372:                         min_value=1,
-0373:                         value=1,
-0374:                         step=1,
-0375:                         key="new_leg_quantity"
-0376:                     )
-0377:                 
-0378:                 if st.button("Add Leg"):
-0379:                     st.session_state.strategy_legs.append({
-0380:                         'type': option_type,
-0381:                         'position': position,
-0382:                         'strike': strike,
-0383:                         'quantity': quantity * (1 if position == "Long" else -1)
-0384:                     })
-0385:             
-0386:             # Display current strategy composition
-0387:             if st.session_state.strategy_legs:
-0388:                 st.subheader("Current Strategy Composition")
-0389:                 for i, leg in enumerate(st.session_state.strategy_legs):
-0390:                     col1, col2, col3 = st.columns([2, 2, 1])
-0391:                     with col1:
-0392:                         st.write(f"{leg['position']} {leg['quantity']} {leg['type']}")
-0393:                     with col2:
-0394:                         st.write(f"Strike: {leg['strike']}")
-0395:                     with col3:
-0396:                         if st.button("Remove", key=f"remove_{i}"):
-0397:                             st.session_state.strategy_legs.pop(i)
-0398:                             st.experimental_rerun()
-0399:                 
-0400:                 # Analyze custom strategy
-0401:                 custom_profile = self._generate_custom_strategy_profile(
-0402:                     st.session_state.strategy_legs
-0403:                 )
-0404:                 self._display_strategy_analysis(custom_profile)
-0405:             
-0406:             else:
-0407:                 st.info("Add legs to your strategy using the form above.")
-0408:     
-0409:     def _render_portfolio_tab(self):
-0410:         """Render the portfolio analysis tab."""
-0411:         st.header("Portfolio Analysis")
-0412:         
-0413:         # Portfolio input method selection
-0414:         input_method = st.radio(
-0415:             "Input Method",
-0416:             ["Manual Entry", "Upload Positions", "Sample Portfolio"],
-0417:             horizontal=True
-0418:         )
-0419:         
-0420:         if input_method == "Manual Entry":
-0421:             # Similar to strategy builder but with more position details
-0422:             self._render_manual_portfolio_entry()
-0423:         
-0424:         elif input_method == "Upload Positions":
-0425:             uploaded_file = st.file_uploader(
-0426:                 "Upload Portfolio CSV",
-0427:                 type=['csv'],
-0428:                 help="CSV file with columns: Type,Strike,Expiry,Quantity,Premium"
-0429:             )
-0430:             
-0431:             if uploaded_file:
-0432:                 positions = self._parse_portfolio_file(uploaded_file)
-0433:                 self._analyze_portfolio(positions)
-0434:         
-0435:         else:  # Sample Portfolio
-0436:             sample_name = st.selectbox(
-0437:                 "Select Sample Portfolio",
-0438:                 ["Covered Call Strategy", "Iron Condor Portfolio", "Delta-Neutral"]
-0439:             )
-0440:             
-0441:             positions = self._get_sample_portfolio(sample_name)
-0442:             self._analyze_portfolio(positions)
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\ui\components\charts.py
 // ----------------------------------------
@@ -5780,6 +4296,449 @@
 0803:         fig.update_yaxes(title_text="Value", row=2, col=1)
 0804:         
 0805:         return fig
+
+// File: C:\Users\aluja\Desktop\OptionVisualizer\src\ui\option_visualizer.py
+// ----------------------------------------
+0001: # src/ui/app.py
+0002: 
+0003: import streamlit as st
+0004: from typing import Dict, List, Optional
+0005: import plotly.graph_objects as go
+0006: from datetime import datetime
+0007: 
+0008: from ..models.black_scholes import BlackScholesModel
+0009: from ..models.binomial import BinomialModel
+0010: from ..models.monte_carlo import MonteCarloModel
+0011: from ..analytics.portfolio_visualization import PortfolioVisualizer
+0012: from ..analytics.strategy_visualization import StrategyVisualizer
+0013: from ..analytics.volatility import RiskAnalyzer
+0014: from .education import OptionsEducation
+0015: from ..config import AppConfig
+0016: 
+0017: class OptionVisualizerApp:
+0018:     """
+0019:     Main application class for the Option Pricing Visualizer.
+0020:     
+0021:     This class orchestrates the entire application, providing:
+0022:     1. Clean, intuitive UI layout
+0023:     2. Interactive model parameter inputs
+0024:     3. Real-time visualization updates
+0025:     4. Educational content integration
+0026:     5. Advanced analytics features
+0027:     """
+0028:     
+0029:     def __init__(self):
+0030:         """Initialize application components and state."""
+0031:         # Initialize pricing models
+0032:         self.black_scholes = BlackScholesModel()
+0033:         self.binomial = BinomialModel()
+0034:         self.monte_carlo = MonteCarloModel()
+0035:         
+0036:         # Initialize visualization components
+0037:         self.portfolio_viz = PortfolioVisualizer()
+0038:         self.strategy_viz = StrategyVisualizer(self.black_scholes)
+0039:         self.vol_analyzer = RiskAnalyzer(self.black_scholes)
+0040:         
+0041:         # Initialize educational content
+0042:         self.education = OptionsEducation()
+0043:         
+0044:         # Set page configuration
+0045:         st.set_page_config(
+0046:             page_title="Option Pricing Visualizer",
+0047:             layout="wide",
+0048:             initial_sidebar_state="expanded"
+0049:         )
+0050:         
+0051:         # Apply custom styling
+0052:         self._apply_custom_styling()
+0053:     
+0054:     def run(self):
+0055:         """Main application entry point."""
+0056:         # Display header and introduction
+0057:         self._render_header()
+0058:         
+0059:         # Create main navigation
+0060:         tab_options = [
+0061:             "Option Pricing",
+0062:             "Strategy Builder",
+0063:             "Portfolio Analysis",
+0064:             "Risk Analysis",
+0065:             "Learning Center"
+0066:         ]
+0067:         
+0068:         selected_tab = st.sidebar.radio("Navigation", tab_options)
+0069:         
+0070:         # Render selected tab content
+0071:         if selected_tab == "Option Pricing":
+0072:             self._render_pricing_tab()
+0073:         elif selected_tab == "Strategy Builder":
+0074:             self._render_strategy_tab()
+0075:         elif selected_tab == "Portfolio Analysis":
+0076:             self._render_portfolio_tab()
+0077:         else:  # Learning Center
+0078:             self._render_learning_tab()
+0079:     
+0080:     def _render_header(self):
+0081:         """Render application header with title and introduction."""
+0082:         st.markdown(
+0083:             """
+0084:             <h1 style='text-align: center;'>Option Pricing Visualizer</h1>
+0085:             
+0086:             <p style='text-align: center; font-size: 1.2em;'>
+0087:             An interactive tool for understanding option pricing, strategies, and risk management
+0088:             </p>
+0089:             """,
+0090:             unsafe_allow_html=True
+0091:         )
+0092:         
+0093:         with st.expander("About this Tool", expanded=False):
+0094:             st.markdown(
+0095:                 """
+0096:                 This tool helps you understand options through:
+0097:                 - Interactive pricing model comparisons
+0098:                 - Visual strategy analysis
+0099:                 - Portfolio risk assessment
+0100:                 - Educational content and tutorials
+0101:                 
+0102:                 Start by selecting a section from the sidebar navigation.
+0103:                 """
+0104:             )
+0105:     
+0106:     def _render_pricing_tab(self):
+0107:         """Render the option pricing analysis tab."""
+0108:         st.header("Option Pricing Analysis")
+0109:         
+0110:         # Create two columns for input parameters
+0111:         col1, col2 = st.columns(2)
+0112:         
+0113:         with col1:
+0114:             # Basic parameters
+0115:             st.subheader("Option Parameters")
+0116:             underlying_price = st.number_input(
+0117:                 "Underlying Price",
+0118:                 min_value=1.0,
+0119:                 value=100.0,
+0120:                 step=1.0,
+0121:                 help="Current price of the underlying asset"
+0122:             )
+0123:             
+0124:             strike_price = st.number_input(
+0125:                 "Strike Price",
+0126:                 min_value=1.0,
+0127:                 value=100.0,
+0128:                 step=1.0,
+0129:                 help="Strike price of the option"
+0130:             )
+0131:             
+0132:             time_to_expiry = st.slider(
+0133:                 "Time to Expiry (Years)",
+0134:                 min_value=0.1,
+0135:                 max_value=2.0,
+0136:                 value=1.0,
+0137:                 step=0.1,
+0138:                 help="Time until option expiration in years"
+0139:             )
+0140:         
+0141:         with col2:
+0142:             # Market parameters
+0143:             st.subheader("Market Parameters")
+0144:             volatility = st.slider(
+0145:                 "Volatility",
+0146:                 min_value=0.1,
+0147:                 max_value=1.0,
+0148:                 value=0.2,
+0149:                 step=0.05,
+0150:                 help="Annualized volatility"
+0151:             )
+0152:             
+0153:             risk_free_rate = st.slider(
+0154:                 "Risk-free Rate",
+0155:                 min_value=0.0,
+0156:                 max_value=0.1,
+0157:                 value=0.05,
+0158:                 step=0.01,
+0159:                 help="Annual risk-free interest rate"
+0160:             )
+0161:         
+0162:         # Model selection and comparison
+0163:         st.subheader("Model Selection")
+0164:         models = st.multiselect(
+0165:             "Select Models to Compare",
+0166:             ["Black-Scholes", "Binomial", "Monte Carlo"],
+0167:             default=["Black-Scholes"]
+0168:         )
+0169:         
+0170:         option_type = st.radio(
+0171:             "Option Type",
+0172:             ["Call", "Put"],
+0173:             horizontal=True
+0174:         )
+0175:         
+0176:         if not models:
+0177:             st.warning("Please select at least one model to analyze.")
+0178:             return
+0179:         
+0180:         # Calculate and display results
+0181:         results = self._calculate_model_results(
+0182:             models,
+0183:             underlying_price,
+0184:             strike_price,
+0185:             time_to_expiry,
+0186:             volatility,
+0187:             risk_free_rate,
+0188:             option_type.lower()
+0189:         )
+0190:         
+0191:         self._display_pricing_results(results)
+0192:         
+0193:         # Display interactive visualizations
+0194:         st.subheader("Visual Analysis")
+0195:         visualization_type = st.selectbox(
+0196:             "Select Visualization",
+0197:             ["Price vs. Underlying", "Greeks Profile", "Time Decay"]
+0198:         )
+0199:         
+0200:         self._display_pricing_visualization(
+0201:             visualization_type,
+0202:             results,
+0203:             underlying_price,
+0204:             strike_price
+0205:         )
+0206:     
+0207:     def _calculate_model_results(self, models: List[str], S: float, K: float,
+0208:                                T: float, sigma: float, r: float,
+0209:                                option_type: str) -> Dict[str, float]:
+0210:         """Calculate option prices and Greeks using selected models."""
+0211:         results = {}
+0212:         
+0213:         for model in models:
+0214:             if model == "Black-Scholes":
+0215:                 if option_type == "call":
+0216:                     result = self.black_scholes.price_call(S, K, r, sigma, T)
+0217:                 else:
+0218:                     result = self.black_scholes.price_put(S, K, r, sigma, T)
+0219:             elif model == "Binomial":
+0220:                 result = self.binomial.price_option(
+0221:                     S, K, r, sigma, T,
+0222:                     option_type=option_type,
+0223:                     exercise="european"
+0224:                 )
+0225:             else:  # Monte Carlo
+0226:                 if option_type == "call":
+0227:                     result = self.monte_carlo.price_call(S, K, r, sigma, T)
+0228:                 else:
+0229:                     result = self.monte_carlo.price_put(S, K, r, sigma, T)
+0230:             
+0231:             results[model] = result
+0232:         
+0233:         return results
+0234:     
+0235:     def _display_pricing_results(self, results: Dict[str, float]):
+0236:         """Display pricing results in a clear, organized manner."""
+0237:         st.subheader("Pricing Results")
+0238:         
+0239:         # Create columns for each model
+0240:         cols = st.columns(len(results))
+0241:         
+0242:         for col, (model, result) in zip(cols, results.items()):
+0243:             with col:
+0244:                 st.metric(
+0245:                     label=f"{model} Price",
+0246:                     value=f"${result.price:.2f}"
+0247:                 )
+0248:                 
+0249:                 if result.greeks:
+0250:                     st.markdown("#### Greeks")
+0251:                     for greek, value in result.greeks.items():
+0252:                         st.metric(greek.capitalize(), f"{value:.4f}")
+0253:     
+0254:     def _display_pricing_visualization(self, viz_type: str, results: Dict,
+0255:                                     current_price: float, strike: float):
+0256:         """Create and display interactive pricing visualizations."""
+0257:         # Implementation of visualization logic...
+0258:         pass
+0259: 
+0260:     def _render_strategy_tab(self):
+0261:         """Render the strategy builder and analysis tab."""
+0262:         st.header("Options Strategy Builder")
+0263:         
+0264:         # Strategy selection or custom builder
+0265:         strategy_mode = st.radio(
+0266:             "Strategy Mode",
+0267:             ["Pre-defined Strategies", "Custom Strategy Builder"],
+0268:             horizontal=True
+0269:         )
+0270:         
+0271:         if strategy_mode == "Pre-defined Strategies":
+0272:             strategy = st.selectbox(
+0273:                 "Select Strategy",
+0274:                 [
+0275:                     "Bull Call Spread",
+0276:                     "Bear Put Spread",
+0277:                     "Iron Condor",
+0278:                     "Butterfly Spread",
+0279:                     "Calendar Spread",
+0280:                     "Straddle",
+0281:                     "Strangle"
+0282:                 ]
+0283:             )
+0284:             
+0285:             # Display strategy information
+0286:             st.markdown(self.education.get_strategy_description(strategy))
+0287:             
+0288:             # Strategy parameters
+0289:             col1, col2 = st.columns(2)
+0290:             with col1:
+0291:                 underlying_price = st.number_input(
+0292:                     "Underlying Price",
+0293:                     min_value=1.0,
+0294:                     value=100.0,
+0295:                     step=1.0
+0296:                 )
+0297:                 
+0298:                 width = st.slider(
+0299:                     "Strategy Width",
+0300:                     min_value=5,
+0301:                     max_value=50,
+0302:                     value=10,
+0303:                     step=5,
+0304:                     help="Distance between strikes in the strategy"
+0305:                 )
+0306:             
+0307:             with col2:
+0308:                 expiry = st.slider(
+0309:                     "Days to Expiration",
+0310:                     min_value=7,
+0311:                     max_value=365,
+0312:                     value=30,
+0313:                     step=7
+0314:                 )
+0315:                 
+0316:                 size = st.number_input(
+0317:                     "Position Size (contracts)",
+0318:                     min_value=1,
+0319:                     value=1,
+0320:                     step=1
+0321:                 )
+0322:             
+0323:             # Generate and display strategy analysis
+0324:             strategy_profile = self._generate_strategy_profile(
+0325:                 strategy,
+0326:                 underlying_price,
+0327:                 width,
+0328:                 expiry,
+0329:                 size
+0330:             )
+0331:             
+0332:             self._display_strategy_analysis(strategy_profile)
+0333:             
+0334:         else:  # Custom Strategy Builder
+0335:             st.subheader("Build Custom Strategy")
+0336:             
+0337:             # Initialize or get existing legs
+0338:             if 'strategy_legs' not in st.session_state:
+0339:                 st.session_state.strategy_legs = []
+0340:             
+0341:             # Add new leg form
+0342:             with st.expander("Add Strategy Leg", expanded=True):
+0343:                 col1, col2 = st.columns(2)
+0344:                 
+0345:                 with col1:
+0346:                     option_type = st.selectbox(
+0347:                         "Option Type",
+0348:                         ["Call", "Put"],
+0349:                         key="new_leg_type"
+0350:                     )
+0351:                     
+0352:                     position = st.radio(
+0353:                         "Position",
+0354:                         ["Long", "Short"],
+0355:                         horizontal=True,
+0356:                         key="new_leg_position"
+0357:                     )
+0358:                 
+0359:                 with col2:
+0360:                     strike = st.number_input(
+0361:                         "Strike Price",
+0362:                         min_value=1.0,
+0363:                         value=100.0,
+0364:                         step=1.0,
+0365:                         key="new_leg_strike"
+0366:                     )
+0367:                     
+0368:                     quantity = st.number_input(
+0369:                         "Quantity",
+0370:                         min_value=1,
+0371:                         value=1,
+0372:                         step=1,
+0373:                         key="new_leg_quantity"
+0374:                     )
+0375:                 
+0376:                 if st.button("Add Leg"):
+0377:                     st.session_state.strategy_legs.append({
+0378:                         'type': option_type,
+0379:                         'position': position,
+0380:                         'strike': strike,
+0381:                         'quantity': quantity * (1 if position == "Long" else -1)
+0382:                     })
+0383:             
+0384:             # Display current strategy composition
+0385:             if st.session_state.strategy_legs:
+0386:                 st.subheader("Current Strategy Composition")
+0387:                 for i, leg in enumerate(st.session_state.strategy_legs):
+0388:                     col1, col2, col3 = st.columns([2, 2, 1])
+0389:                     with col1:
+0390:                         st.write(f"{leg['position']} {leg['quantity']} {leg['type']}")
+0391:                     with col2:
+0392:                         st.write(f"Strike: {leg['strike']}")
+0393:                     with col3:
+0394:                         if st.button("Remove", key=f"remove_{i}"):
+0395:                             st.session_state.strategy_legs.pop(i)
+0396:                             st.experimental_rerun()
+0397:                 
+0398:                 # Analyze custom strategy
+0399:                 custom_profile = self._generate_custom_strategy_profile(
+0400:                     st.session_state.strategy_legs
+0401:                 )
+0402:                 self._display_strategy_analysis(custom_profile)
+0403:             
+0404:             else:
+0405:                 st.info("Add legs to your strategy using the form above.")
+0406:     
+0407:     def _render_portfolio_tab(self):
+0408:         """Render the portfolio analysis tab."""
+0409:         st.header("Portfolio Analysis")
+0410:         
+0411:         # Portfolio input method selection
+0412:         input_method = st.radio(
+0413:             "Input Method",
+0414:             ["Manual Entry", "Upload Positions", "Sample Portfolio"],
+0415:             horizontal=True
+0416:         )
+0417:         
+0418:         if input_method == "Manual Entry":
+0419:             # Similar to strategy builder but with more position details
+0420:             self._render_manual_portfolio_entry()
+0421:         
+0422:         elif input_method == "Upload Positions":
+0423:             uploaded_file = st.file_uploader(
+0424:                 "Upload Portfolio CSV",
+0425:                 type=['csv'],
+0426:                 help="CSV file with columns: Type,Strike,Expiry,Quantity,Premium"
+0427:             )
+0428:             
+0429:             if uploaded_file:
+0430:                 positions = self._parse_portfolio_file(uploaded_file)
+0431:                 self._analyze_portfolio(positions)
+0432:         
+0433:         else:  # Sample Portfolio
+0434:             sample_name = st.selectbox(
+0435:                 "Select Sample Portfolio",
+0436:                 ["Covered Call Strategy", "Iron Condor Portfolio", "Delta-Neutral"]
+0437:             )
+0438:             
+0439:             positions = self._get_sample_portfolio(sample_name)
+0440:             self._analyze_portfolio(positions)
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\ui\pages\education.py
 // ----------------------------------------

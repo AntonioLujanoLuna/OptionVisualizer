@@ -6,9 +6,9 @@ from plotly.subplots import make_subplots
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from .volatility import VolatilitySurface
-from ..models.base import OptionResult
-from ..config import AppConfig
+from src.analytics.volatility import VolatilitySurface
+from src.models.base import OptionResult
+from src.config import AppConfig
 
 @dataclass
 class VisualizationConfig:

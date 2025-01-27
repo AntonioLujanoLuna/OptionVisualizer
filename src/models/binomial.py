@@ -4,9 +4,9 @@ import numpy as np
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 
-from .base import OptionPricingModel, OptionResult
-from ..utils.validation import validate_parameters
-from ..config import AppConfig
+from src.models.base import OptionPricingModel, OptionResult
+from src.utils.validation import validate_parameters
+from src.config import AppConfig
 
 @dataclass
 class BinomialParameters:

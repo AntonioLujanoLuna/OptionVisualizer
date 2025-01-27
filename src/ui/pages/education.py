@@ -1,9 +1,9 @@
 # src/ui/pages/education.py
 
 import streamlit as st
-from ..components.charts import OptionPayoffChart
-from ...models.black_scholes import BlackScholesModel
-from ...analytics.risk import Position
+from src.ui.components.charts import OptionPayoffChart
+from src.models.black_scholes import BlackScholesModel
+from src.analytics.risk import Position
 
 def render_page():
     """
