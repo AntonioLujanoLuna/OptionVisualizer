@@ -1,4 +1,4 @@
-﻿// Python Files Concatenated on 01/27/2025 17:20:13
+﻿// Python Files Concatenated on 01/27/2025 17:48:42
 // ----------------------------------------
 
 
@@ -2197,376 +2197,375 @@
 0005: Features:
 0006: - Multiple pricing models (Black-Scholes, Binomial, Monte Carlo)
 0007: - Interactive 2D and 3D visualizations
-0008: - Real-time market data integration
-0009: - Greeks analysis and visualization
-0010: - Volatility surface exploration
-0011: """
-0012: 
-0013: import streamlit as st
-0014: import numpy as np
-0015: import plotly.graph_objects as go
-0016: from plotly.subplots import make_subplots
-0017: import seaborn as sns
-0018: from datetime import datetime
-0019: 
-0020: from pricing_models import (
-0021:     option_price,
-0022:     black_scholes_greeks_call,
-0023:     black_scholes_greeks_put,
-0024:     implied_volatility_surface
-0025: )
-0026: from utils import fetch_market_data
-0027: 
-0028: # Visual Theme Configuration
-0029: COLORS = {
-0030:     'primary': '#2E86C1',
-0031:     'secondary': '#85C1E9',
-0032:     'accent': '#D4E6F1',
-0033:     'text': '#2C3E50',
-0034:     'background': '#F7F9F9',
-0035:     'success': '#27AE60',
-0036:     'warning': '#F39C12',
-0037:     'error': '#E74C3C'
-0038: }
-0039: 
-0040: def setup_page_config():
-0041:     """Configure the Streamlit page with custom settings and styling."""
-0042:     st.set_page_config(
-0043:         page_title="Advanced Option Pricing",
-0044:         layout="wide",
-0045:         initial_sidebar_state="expanded",
-0046:         menu_items={
-0047:             'Get Help': 'https://github.com/yourusername/option-pricing',
-0048:             'Report a bug': "https://github.com/yourusername/option-pricing/issues",
-0049:             'About': "# Option Pricing Visualizer\nAn interactive tool for understanding options."
-0050:         }
-0051:     )
-0052:     
-0053:     # Custom CSS for better visual appeal
-0054:     st.markdown("""
-0055:         <style>
-0056:         .stApp {
-0057:             background-color: #F7F9F9;
-0058:         }
-0059:         .stButton>button {
-0060:             background-color: #2E86C1;
-0061:             color: white;
-0062:             border-radius: 5px;
-0063:             padding: 0.5rem 1rem;
-0064:         }
-0065:         .stProgress .st-bo {
-0066:             background-color: #85C1E9;
-0067:         }
-0068:         .plot-container {
-0069:             background-color: white;
-0070:             padding: 1rem;
-0071:             border-radius: 10px;
-0072:             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-0073:         }
-0074:         </style>
-0075:     """, unsafe_allow_html=True)
-0076: 
-0077: def scenario_input_box(scenario_num=1, market_data=None):
-0078:     """Enhanced input box with market data integration and validation."""
-0079:     expander = st.expander(f"Scenario {scenario_num} Settings", expanded=True)
-0080:     
-0081:     with expander:
-0082:         col1, col2 = st.columns(2)
-0083:         
-0084:         with col1:
-0085:             S = st.number_input(
-0086:                 f"Spot Price (S{scenario_num})",
-0087:                 min_value=0.01,
-0088:                 max_value=10000.0,
-0089:                 value=100.0,
-0090:                 step=0.1,
-0091:                 key=f"S{scenario_num}"
-0092:             )
-0093:             
-0094:             if market_data and st.checkbox(f"Use Market Price ({market_data['price']:.2f})", key=f"use_market{scenario_num}"):
-0095:                 S = market_data['price']
-0096:             
-0097:             K = st.number_input(
-0098:                 f"Strike Price (K{scenario_num})",
-0099:                 min_value=0.01,
-0100:                 max_value=10000.0,
-0101:                 value=100.0,
-0102:                 step=0.1,
-0103:                 key=f"K{scenario_num}"
-0104:             )
-0105:             
-0106:             r = st.slider(
-0107:                 f"Risk-free Rate (r{scenario_num})",
-0108:                 min_value=0.0,
-0109:                 max_value=0.20,
-0110:                 value=0.05,
-0111:                 step=0.001,
-0112:                 key=f"r{scenario_num}"
-0113:             )
-0114:         
-0115:         with col2:
-0116:             sigma = st.number_input(
-0117:                 f"Volatility (σ{scenario_num})",
-0118:                 min_value=0.01,
-0119:                 max_value=2.0,
-0120:                 value=0.2,
-0121:                 step=0.01,
-0122:                 key=f"sigma{scenario_num}"
-0123:             )
-0124:             
-0125:             if market_data and st.checkbox(f"Use Market IV ({market_data['implied_volatility']:.2%})", key=f"use_iv{scenario_num}"):
-0126:                 sigma = market_data['implied_volatility']
-0127:             
-0128:             T = st.slider(
-0129:                 f"Time to Maturity (T{scenario_num})",
-0130:                 min_value=0.01,
-0131:                 max_value=5.0,
-0132:                 value=1.0,
-0133:                 step=0.01,
-0134:                 key=f"T{scenario_num}"
-0135:             )
-0136:         
-0137:         # Advanced parameters in a sub-expander
-0138:         with st.expander("Advanced Parameters"):
-0139:             col3, col4 = st.columns(2)
-0140:             with col3:
-0141:                 steps = st.number_input(
-0142:                     f"Binomial Steps",
-0143:                     min_value=10,
-0144:                     max_value=2000,
-0145:                     value=100,
-0146:                     step=10,
-0147:                     key=f"steps{scenario_num}"
-0148:                 )
-0149:             with col4:
-0150:                 sims = st.number_input(
-0151:                     f"Monte Carlo Simulations",
-0152:                     min_value=1000,
-0153:                     max_value=200000,
-0154:                     value=10000,
-0155:                     step=1000,
-0156:                     key=f"sims{scenario_num}"
-0157:                 )
-0158:     
-0159:     return S, K, r, sigma, T, steps, sims
-0160: 
-0161: def plot_option_prices(scenarios, model_choice, opt_type_choice, x_variable="spot"):
-0162:     """Generate an interactive plot comparing option prices across scenarios."""
-0163:     fig = go.Figure()
-0164:     
-0165:     for i, scenario in enumerate(scenarios, 1):
-0166:         S, K, r, sigma, T, steps, sims = scenario
-0167:         
-0168:         if x_variable == "spot":
-0169:             x_vals = np.linspace(max(1, 0.5 * S), 1.5 * S, 100)
-0170:             x_label = "Spot Price"
-0171:             current_x = S
-0172:         elif x_variable == "strike":
-0173:             x_vals = np.linspace(max(1, 0.5 * K), 1.5 * K, 100)
-0174:             x_label = "Strike Price"
-0175:             current_x = K
-0176:         else:  # time
-0177:             x_vals = np.linspace(0.01, 5.0, 100)
-0178:             x_label = "Time to Maturity"
-0179:             current_x = T
-0180:         
-0181:         for opt_type in (["call", "put"] if opt_type_choice == "Both" else [opt_type_choice.lower()]):
-0182:             prices = []
-0183:             for x in x_vals:
-0184:                 if x_variable == "spot":
-0185:                     price = option_price(x, K, r, sigma, T, opt_type, model_choice, steps, sims)
-0186:                 elif x_variable == "strike":
-0187:                     price = option_price(S, x, r, sigma, T, opt_type, model_choice, steps, sims)
-0188:                 else:
-0189:                     price = option_price(S, K, r, sigma, x, opt_type, model_choice, steps, sims)
-0190:                 prices.append(price)
-0191:             
-0192:             fig.add_trace(
-0193:                 go.Scatter(
-0194:                     x=x_vals,
-0195:                     y=prices,
-0196:                     name=f"Scenario {i} - {opt_type.title()}",
-0197:                     line=dict(
-0198:                         color=COLORS['primary'] if opt_type == "call" else COLORS['secondary'],
-0199:                         dash='solid' if i == 1 else 'dash'
-0200:                     )
-0201:                 )
-0202:             )
-0203:             
-0204:             # Add vertical line for current value
-0205:             fig.add_vline(
-0206:                 x=current_x,
-0207:                 line_dash="dot",
-0208:                 line_color=COLORS['accent'],
-0209:                 annotation_text=f"Current {x_variable.title()}"
-0210:             )
-0211:     
-0212:     fig.update_layout(
-0213:         title=f"{model_choice} Option Prices vs {x_label}",
-0214:         xaxis_title=x_label,
-0215:         yaxis_title="Option Price",
-0216:         template="plotly_white",
-0217:         hovermode="x unified",
-0218:         legend=dict(
-0219:             yanchor="top",
-0220:             y=0.99,
-0221:             xanchor="left",
-0222:             x=0.01
-0223:         )
-0224:     )
-0225:     
-0226:     return fig
-0227: 
-0228: def plot_greeks(scenario, opt_type):
-0229:     """Generate an interactive plot of option Greeks."""
-0230:     S, K, r, sigma, T, _, _ = scenario
-0231:     spot_range = np.linspace(max(1, 0.5 * S), 1.5 * S, 100)
-0232:     
-0233:     greeks_func = black_scholes_greeks_call if opt_type.lower() == "call" else black_scholes_greeks_put
-0234:     
-0235:     fig = make_subplots(
-0236:         rows=2, cols=2,
-0237:         subplot_titles=["Delta", "Gamma", "Theta", "Vega"],
-0238:         vertical_spacing=0.15
-0239:     )
-0240:     
-0241:     greek_values = {
-0242:         'Delta': [], 'Gamma': [], 'Theta': [], 'Vega': []
-0243:     }
-0244:     
-0245:     for s in spot_range:
-0246:         greeks = greeks_func(s, K, r, sigma, T)
-0247:         for greek in greek_values:
-0248:             greek_values[greek].append(greeks[greek])
-0249:     
-0250:     positions = {
-0251:         'Delta': (1, 1), 'Gamma': (1, 2),
-0252:         'Theta': (2, 1), 'Vega': (2, 2)
-0253:     }
-0254:     
-0255:     for greek, values in greek_values.items():
-0256:         row, col = positions[greek]
-0257:         fig.add_trace(
-0258:             go.Scatter(
-0259:                 x=spot_range,
-0260:                 y=values,
-0261:                 name=greek,
-0262:                 line=dict(color=COLORS['primary'])
-0263:             ),
-0264:             row=row, col=col
-0265:         )
-0266:     
-0267:     fig.update_layout(
-0268:         height=800,
-0269:         showlegend=False,
-0270:         template="plotly_white",
-0271:         title_text=f"Option Greeks ({opt_type})"
-0272:     )
-0273:     
-0274:     return fig
-0275: 
-0276: def main():
-0277:     """Main application function."""
-0278:     setup_page_config()
-0279:     
-0280:     # Title and Introduction
-0281:     st.markdown(
-0282:         "<h1 style='text-align: center; color: #2C3E50;'>Advanced Option Pricing Visualizer</h1>",
-0283:         unsafe_allow_html=True
-0284:     )
-0285:     
-0286:     st.markdown("""
-0287:         This tool provides interactive visualization and analysis of option pricing models.
-0288:         Compare different pricing methods, explore Greeks, and analyze volatility surfaces
-0289:         with real-time market data integration.
-0290:     """)
-0291:     
-0292:     # Sidebar Configuration
-0293:     st.sidebar.header("Configuration")
-0294:     
-0295:     # Market Data Integration
-0296:     ticker_symbol = st.sidebar.text_input("Stock Ticker (e.g., AAPL)", value="AAPL")
-0297:     market_data = None
-0298:     
-0299:     if st.sidebar.button("Fetch Market Data"):
-0300:         with st.spinner("Fetching market data..."):
-0301:             market_data = fetch_market_data(ticker_symbol)
-0302:             if market_data:
-0303:                 st.sidebar.success(f"Successfully fetched data for {ticker_symbol}")
-0304:             else:
-0305:                 st.sidebar.error("Failed to fetch market data")
-0306:     
-0307:     # Model Selection
-0308:     model_choice = st.sidebar.selectbox(
-0309:         "Pricing Model",
-0310:         ["Black-Scholes", "Binomial", "Monte Carlo"],
-0311:         help="Select the pricing model to use for calculations"
-0312:     )
-0313:     
-0314:     # Option Type
-0315:     opt_type_choice = st.sidebar.selectbox(
-0316:         "Option Type",
-0317:         ["Call", "Put", "Both"],
-0318:         help="Select which option type(s) to analyze"
-0319:     )
-0320:     
-0321:     # Analysis Mode
-0322:     analysis_mode = st.sidebar.selectbox(
-0323:         "Analysis Mode",
-0324:         ["Basic", "Advanced"],
-0325:         help="Basic mode shows price plots, Advanced includes Greeks and volatility surface"
-0326:     )
-0327:     
-0328:     # Main Content Area
-0329:     tab1, tab2, tab3 = st.tabs(["Price Analysis", "Greeks", "Volatility Surface"])
-0330:     
-0331:     with tab1:
-0332:         # Scenario Setup
-0333:         scenario1 = scenario_input_box(1, market_data)
-0334:         
-0335:         if st.checkbox("Add Second Scenario"):
-0336:             scenario2 = scenario_input_box(2, market_data)
-0337:             scenarios = [scenario1, scenario2]
-0338:         else:
-0339:             scenarios = [scenario1]
-0340:         
-0341:         # Variable to plot against
-0342:         x_variable = st.selectbox(
-0343:             "Plot Against",
-0344:             ["spot", "strike", "time"],
-0345:             format_func=lambda x: {"spot": "Spot Price", "strike": "Strike Price", "time": "Time to Maturity"}[x]
-0346:         )
-0347:         
-0348:         # Generate and display the main price plot
-0349:         price_fig = plot_option_prices(scenarios, model_choice, opt_type_choice, x_variable)
-0350:         st.plotly_chart(price_fig, use_container_width=True)
-0351:     
-0352:     with tab2:
-0353:         if model_choice == "Black-Scholes":
-0354:             st.plotly_chart(plot_greeks(scenario1, opt_type_choice), use_container_width=True)
-0355:         else:
-0356:             st.info("Greeks analysis is only available for the Black-Scholes model")
-0357:     
-0358:     with tab3:
-0359:         if analysis_mode == "Advanced":
-0360:             # Generate and display volatility surface
-0361:             surface_fig = implied_volatility_surface(scenario1[0], scenario1[1], scenario1[2])
-0362:             st.plotly_chart(surface_fig, use_container_width=True)
-0363:         else:
-0364:             st.info("Volatility surface analysis is available in Advanced mode")
-0365:     
-0366:     # Footer with additional information
-0367:     st.markdown("---")
-0368:     st.markdown("""
-0369:         ### Tips for Usage
-0370:         - Use the sidebar to configure the main parameters and analysis mode
-0371:         - Compare different scenarios by enabling the second scenario
-0372:         - Fetch real market data to compare theoretical prices with market values
-0373:         - Explore the Greeks and volatility surface in Advanced mode
-0374:     """)
-0375: 
-0376: if __name__ == "__main__":
-0377:     main()
+0008: - Greeks analysis and visualization
+0009: - Volatility surface exploration
+0010: """
+0011: 
+0012: import streamlit as st
+0013: import numpy as np
+0014: import plotly.graph_objects as go
+0015: from plotly.subplots import make_subplots
+0016: import seaborn as sns
+0017: from datetime import datetime
+0018: 
+0019: from pricing_models import (
+0020:     option_price,
+0021:     black_scholes_greeks_call,
+0022:     black_scholes_greeks_put,
+0023:     implied_volatility_surface
+0024: )
+0025: from utils import fetch_market_data
+0026: 
+0027: # Visual Theme Configuration
+0028: COLORS = {
+0029:     'primary': '#2E86C1',
+0030:     'secondary': '#85C1E9',
+0031:     'accent': '#D4E6F1',
+0032:     'text': '#2C3E50',
+0033:     'background': '#F7F9F9',
+0034:     'success': '#27AE60',
+0035:     'warning': '#F39C12',
+0036:     'error': '#E74C3C'
+0037: }
+0038: 
+0039: def setup_page_config():
+0040:     """Configure the Streamlit page with custom settings and styling."""
+0041:     st.set_page_config(
+0042:         page_title="Advanced Option Pricing",
+0043:         layout="wide",
+0044:         initial_sidebar_state="expanded",
+0045:         menu_items={
+0046:             'Get Help': 'https://github.com/yourusername/option-pricing',
+0047:             'Report a bug': "https://github.com/yourusername/option-pricing/issues",
+0048:             'About': "# Option Pricing Visualizer\nAn interactive tool for understanding options."
+0049:         }
+0050:     )
+0051:     
+0052:     # Custom CSS for better visual appeal
+0053:     st.markdown("""
+0054:         <style>
+0055:         .stApp {
+0056:             background-color: #F7F9F9;
+0057:         }
+0058:         .stButton>button {
+0059:             background-color: #2E86C1;
+0060:             color: white;
+0061:             border-radius: 5px;
+0062:             padding: 0.5rem 1rem;
+0063:         }
+0064:         .stProgress .st-bo {
+0065:             background-color: #85C1E9;
+0066:         }
+0067:         .plot-container {
+0068:             background-color: white;
+0069:             padding: 1rem;
+0070:             border-radius: 10px;
+0071:             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+0072:         }
+0073:         </style>
+0074:     """, unsafe_allow_html=True)
+0075: 
+0076: def scenario_input_box(scenario_num=1, market_data=None):
+0077:     """Enhanced input box with market data integration and validation."""
+0078:     expander = st.expander(f"Scenario {scenario_num} Settings", expanded=True)
+0079:     
+0080:     with expander:
+0081:         col1, col2 = st.columns(2)
+0082:         
+0083:         with col1:
+0084:             S = st.number_input(
+0085:                 f"Spot Price (S{scenario_num})",
+0086:                 min_value=0.01,
+0087:                 max_value=10000.0,
+0088:                 value=100.0,
+0089:                 step=0.1,
+0090:                 key=f"S{scenario_num}"
+0091:             )
+0092:             
+0093:             if market_data and st.checkbox(f"Use Market Price ({market_data['price']:.2f})", key=f"use_market{scenario_num}"):
+0094:                 S = market_data['price']
+0095:             
+0096:             K = st.number_input(
+0097:                 f"Strike Price (K{scenario_num})",
+0098:                 min_value=0.01,
+0099:                 max_value=10000.0,
+0100:                 value=100.0,
+0101:                 step=0.1,
+0102:                 key=f"K{scenario_num}"
+0103:             )
+0104:             
+0105:             r = st.slider(
+0106:                 f"Risk-free Rate (r{scenario_num})",
+0107:                 min_value=0.0,
+0108:                 max_value=0.20,
+0109:                 value=0.05,
+0110:                 step=0.001,
+0111:                 key=f"r{scenario_num}"
+0112:             )
+0113:         
+0114:         with col2:
+0115:             sigma = st.number_input(
+0116:                 f"Volatility (σ{scenario_num})",
+0117:                 min_value=0.01,
+0118:                 max_value=2.0,
+0119:                 value=0.2,
+0120:                 step=0.01,
+0121:                 key=f"sigma{scenario_num}"
+0122:             )
+0123:             
+0124:             if market_data and st.checkbox(f"Use Market IV ({market_data['implied_volatility']:.2%})", key=f"use_iv{scenario_num}"):
+0125:                 sigma = market_data['implied_volatility']
+0126:             
+0127:             T = st.slider(
+0128:                 f"Time to Maturity (T{scenario_num})",
+0129:                 min_value=0.01,
+0130:                 max_value=5.0,
+0131:                 value=1.0,
+0132:                 step=0.01,
+0133:                 key=f"T{scenario_num}"
+0134:             )
+0135:         
+0136:         # Advanced parameters in a sub-expander
+0137:         with st.expander("Advanced Parameters"):
+0138:             col3, col4 = st.columns(2)
+0139:             with col3:
+0140:                 steps = st.number_input(
+0141:                     f"Binomial Steps",
+0142:                     min_value=10,
+0143:                     max_value=2000,
+0144:                     value=100,
+0145:                     step=10,
+0146:                     key=f"steps{scenario_num}"
+0147:                 )
+0148:             with col4:
+0149:                 sims = st.number_input(
+0150:                     f"Monte Carlo Simulations",
+0151:                     min_value=1000,
+0152:                     max_value=200000,
+0153:                     value=10000,
+0154:                     step=1000,
+0155:                     key=f"sims{scenario_num}"
+0156:                 )
+0157:     
+0158:     return S, K, r, sigma, T, steps, sims
+0159: 
+0160: def plot_option_prices(scenarios, model_choice, opt_type_choice, x_variable="spot"):
+0161:     """Generate an interactive plot comparing option prices across scenarios."""
+0162:     fig = go.Figure()
+0163:     
+0164:     for i, scenario in enumerate(scenarios, 1):
+0165:         S, K, r, sigma, T, steps, sims = scenario
+0166:         
+0167:         if x_variable == "spot":
+0168:             x_vals = np.linspace(max(1, 0.5 * S), 1.5 * S, 100)
+0169:             x_label = "Spot Price"
+0170:             current_x = S
+0171:         elif x_variable == "strike":
+0172:             x_vals = np.linspace(max(1, 0.5 * K), 1.5 * K, 100)
+0173:             x_label = "Strike Price"
+0174:             current_x = K
+0175:         else:  # time
+0176:             x_vals = np.linspace(0.01, 5.0, 100)
+0177:             x_label = "Time to Maturity"
+0178:             current_x = T
+0179:         
+0180:         for opt_type in (["call", "put"] if opt_type_choice == "Both" else [opt_type_choice.lower()]):
+0181:             prices = []
+0182:             for x in x_vals:
+0183:                 if x_variable == "spot":
+0184:                     price = option_price(x, K, r, sigma, T, opt_type, model_choice, steps, sims)
+0185:                 elif x_variable == "strike":
+0186:                     price = option_price(S, x, r, sigma, T, opt_type, model_choice, steps, sims)
+0187:                 else:
+0188:                     price = option_price(S, K, r, sigma, x, opt_type, model_choice, steps, sims)
+0189:                 prices.append(price)
+0190:             
+0191:             fig.add_trace(
+0192:                 go.Scatter(
+0193:                     x=x_vals,
+0194:                     y=prices,
+0195:                     name=f"Scenario {i} - {opt_type.title()}",
+0196:                     line=dict(
+0197:                         color=COLORS['primary'] if opt_type == "call" else COLORS['secondary'],
+0198:                         dash='solid' if i == 1 else 'dash'
+0199:                     )
+0200:                 )
+0201:             )
+0202:             
+0203:             # Add vertical line for current value
+0204:             fig.add_vline(
+0205:                 x=current_x,
+0206:                 line_dash="dot",
+0207:                 line_color=COLORS['accent'],
+0208:                 annotation_text=f"Current {x_variable.title()}"
+0209:             )
+0210:     
+0211:     fig.update_layout(
+0212:         title=f"{model_choice} Option Prices vs {x_label}",
+0213:         xaxis_title=x_label,
+0214:         yaxis_title="Option Price",
+0215:         template="plotly_white",
+0216:         hovermode="x unified",
+0217:         legend=dict(
+0218:             yanchor="top",
+0219:             y=0.99,
+0220:             xanchor="left",
+0221:             x=0.01
+0222:         )
+0223:     )
+0224:     
+0225:     return fig
+0226: 
+0227: def plot_greeks(scenario, opt_type):
+0228:     """Generate an interactive plot of option Greeks."""
+0229:     S, K, r, sigma, T, _, _ = scenario
+0230:     spot_range = np.linspace(max(1, 0.5 * S), 1.5 * S, 100)
+0231:     
+0232:     greeks_func = black_scholes_greeks_call if opt_type.lower() == "call" else black_scholes_greeks_put
+0233:     
+0234:     fig = make_subplots(
+0235:         rows=2, cols=2,
+0236:         subplot_titles=["Delta", "Gamma", "Theta", "Vega"],
+0237:         vertical_spacing=0.15
+0238:     )
+0239:     
+0240:     greek_values = {
+0241:         'Delta': [], 'Gamma': [], 'Theta': [], 'Vega': []
+0242:     }
+0243:     
+0244:     for s in spot_range:
+0245:         greeks = greeks_func(s, K, r, sigma, T)
+0246:         for greek in greek_values:
+0247:             greek_values[greek].append(greeks[greek])
+0248:     
+0249:     positions = {
+0250:         'Delta': (1, 1), 'Gamma': (1, 2),
+0251:         'Theta': (2, 1), 'Vega': (2, 2)
+0252:     }
+0253:     
+0254:     for greek, values in greek_values.items():
+0255:         row, col = positions[greek]
+0256:         fig.add_trace(
+0257:             go.Scatter(
+0258:                 x=spot_range,
+0259:                 y=values,
+0260:                 name=greek,
+0261:                 line=dict(color=COLORS['primary'])
+0262:             ),
+0263:             row=row, col=col
+0264:         )
+0265:     
+0266:     fig.update_layout(
+0267:         height=800,
+0268:         showlegend=False,
+0269:         template="plotly_white",
+0270:         title_text=f"Option Greeks ({opt_type})"
+0271:     )
+0272:     
+0273:     return fig
+0274: 
+0275: def main():
+0276:     """Main application function."""
+0277:     setup_page_config()
+0278:     
+0279:     # Title and Introduction
+0280:     st.markdown(
+0281:         "<h1 style='text-align: center; color: #2C3E50;'>Advanced Option Pricing Visualizer</h1>",
+0282:         unsafe_allow_html=True
+0283:     )
+0284:     
+0285:     st.markdown("""
+0286:         This tool provides interactive visualization and analysis of option pricing models.
+0287:         Compare different pricing methods, explore Greeks, and analyze volatility surfaces
+0288:         with real-time market data integration.
+0289:     """)
+0290:     
+0291:     # Sidebar Configuration
+0292:     st.sidebar.header("Configuration")
+0293:     
+0294:     # Market Data Integration
+0295:     ticker_symbol = st.sidebar.text_input("Stock Ticker (e.g., AAPL)", value="AAPL")
+0296:     market_data = None
+0297:     
+0298:     if st.sidebar.button("Fetch Market Data"):
+0299:         with st.spinner("Fetching market data..."):
+0300:             market_data = fetch_market_data(ticker_symbol)
+0301:             if market_data:
+0302:                 st.sidebar.success(f"Successfully fetched data for {ticker_symbol}")
+0303:             else:
+0304:                 st.sidebar.error("Failed to fetch market data")
+0305:     
+0306:     # Model Selection
+0307:     model_choice = st.sidebar.selectbox(
+0308:         "Pricing Model",
+0309:         ["Black-Scholes", "Binomial", "Monte Carlo"],
+0310:         help="Select the pricing model to use for calculations"
+0311:     )
+0312:     
+0313:     # Option Type
+0314:     opt_type_choice = st.sidebar.selectbox(
+0315:         "Option Type",
+0316:         ["Call", "Put", "Both"],
+0317:         help="Select which option type(s) to analyze"
+0318:     )
+0319:     
+0320:     # Analysis Mode
+0321:     analysis_mode = st.sidebar.selectbox(
+0322:         "Analysis Mode",
+0323:         ["Basic", "Advanced"],
+0324:         help="Basic mode shows price plots, Advanced includes Greeks and volatility surface"
+0325:     )
+0326:     
+0327:     # Main Content Area
+0328:     tab1, tab2, tab3 = st.tabs(["Price Analysis", "Greeks", "Volatility Surface"])
+0329:     
+0330:     with tab1:
+0331:         # Scenario Setup
+0332:         scenario1 = scenario_input_box(1, market_data)
+0333:         
+0334:         if st.checkbox("Add Second Scenario"):
+0335:             scenario2 = scenario_input_box(2, market_data)
+0336:             scenarios = [scenario1, scenario2]
+0337:         else:
+0338:             scenarios = [scenario1]
+0339:         
+0340:         # Variable to plot against
+0341:         x_variable = st.selectbox(
+0342:             "Plot Against",
+0343:             ["spot", "strike", "time"],
+0344:             format_func=lambda x: {"spot": "Spot Price", "strike": "Strike Price", "time": "Time to Maturity"}[x]
+0345:         )
+0346:         
+0347:         # Generate and display the main price plot
+0348:         price_fig = plot_option_prices(scenarios, model_choice, opt_type_choice, x_variable)
+0349:         st.plotly_chart(price_fig, use_container_width=True)
+0350:     
+0351:     with tab2:
+0352:         if model_choice == "Black-Scholes":
+0353:             st.plotly_chart(plot_greeks(scenario1, opt_type_choice), use_container_width=True)
+0354:         else:
+0355:             st.info("Greeks analysis is only available for the Black-Scholes model")
+0356:     
+0357:     with tab3:
+0358:         if analysis_mode == "Advanced":
+0359:             # Generate and display volatility surface
+0360:             surface_fig = implied_volatility_surface(scenario1[0], scenario1[1], scenario1[2])
+0361:             st.plotly_chart(surface_fig, use_container_width=True)
+0362:         else:
+0363:             st.info("Volatility surface analysis is available in Advanced mode")
+0364:     
+0365:     # Footer with additional information
+0366:     st.markdown("---")
+0367:     st.markdown("""
+0368:         ### Tips for Usage
+0369:         - Use the sidebar to configure the main parameters and analysis mode
+0370:         - Compare different scenarios by enabling the second scenario
+0371:         - Fetch real market data to compare theoretical prices with market values
+0372:         - Explore the Greeks and volatility surface in Advanced mode
+0373:     """)
+0374: 
+0375: if __name__ == "__main__":
+0376:     main()
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\config.py
 // ----------------------------------------
@@ -6502,38 +6501,126 @@
 0001: # src/ui/pages/home.py
 0002: 
 0003: import streamlit as st
-0004: 
-0005: def render_page():
-0006:     """Render the home page with introduction and navigation."""
-0007:     st.markdown(
-0008:         """
-0009:         # Option Pricing and Analysis Tool
-0010:         
-0011:         Welcome to the option pricing and analysis tool. This application helps you:
-0012:         
-0013:         - Price options using multiple models
-0014:         - Build and analyze trading strategies
-0015:         - Manage and analyze portfolios
-0016:         - Learn about options through interactive visualizations
-0017:         
-0018:         ## Getting Started
-0019:         
-0020:         Choose a section from the sidebar to begin:
-0021:         
-0022:         - **Option Pricing**: Price individual options and analyze Greeks
-0023:         - **Strategy Builder**: Create and analyze multi-leg options strategies
-0024:         - **Portfolio Analysis**: Manage and analyze your options portfolio
-0025:         - **Education**: Learn about options through interactive examples
-0026:         
-0027:         ## Features
-0028:         
-0029:         - Multiple pricing models (Black-Scholes, Binomial, Monte Carlo)
-0030:         - Interactive strategy building and analysis
-0031:         - Real-time market data integration
-0032:         - Comprehensive risk analytics
-0033:         - Educational content and visualizations
-0034:         """
-0035:     )
+0004: from datetime import datetime
+0005: 
+0006: def render_page():
+0007:     """Render the educational home page."""
+0008:     st.markdown(
+0009:         """
+0010:         # Learn Options Trading Interactively
+0011:         
+0012:         Welcome to your interactive options learning journey! This tool helps you understand:
+0013:         
+0014:         - Core options concepts through hands-on examples
+0015:         - How different pricing models work and compare
+0016:         - Option strategies and when to use them
+0017:         - The Greeks and risk management
+0018:         """
+0019:     )
+0020:     
+0021:     # Display concept of the day
+0022:     st.subheader("Today's Learning Concept")
+0023:     concepts = {
+0024:         0: ("Delta", "Learn how delta measures an option's directional exposure"),
+0025:         1: ("Time Decay", "Understand how options lose value as expiration approaches"),
+0026:         2: ("Implied Volatility", "Explore how market prices imply future volatility"),
+0027:         3: ("Put-Call Parity", "Discover the fundamental relationship between puts and calls"),
+0028:         4: ("Option Strategies", "Study common option combinations and their uses")
+0029:     }
+0030:     day_of_year = datetime.now().timetuple().tm_yday
+0031:     concept, description = concepts[day_of_year % len(concepts)]
+0032:     
+0033:     st.info(f"📚 **{concept}**: {description}")
+0034:     if st.button("Explore This Concept"):
+0035:         st.session_state.selected_concept = concept
+0036:     
+0037:     # Quick start sections
+0038:     col1, col2 = st.columns(2)
+0039:     
+0040:     with col1:
+0041:         st.subheader("Start Learning")
+0042:         st.markdown("""
+0043:             Choose your path:
+0044:             
+0045:             1. **Beginner Track**
+0046:                - Options Basics
+0047:                - Understanding Calls and Puts
+0048:                - Basic Strategies
+0049:             
+0050:             2. **Intermediate Track**
+0051:                - The Greeks
+0052:                - Volatility and Pricing
+0053:                - Spreads and Combinations
+0054:             
+0055:             3. **Advanced Track**
+0056:                - Advanced Strategies
+0057:                - Pricing Models Deep Dive
+0058:                - Volatility Trading
+0059:         """)
+0060:         
+0061:         track = st.selectbox(
+0062:             "Select Your Track",
+0063:             ["Beginner", "Intermediate", "Advanced"]
+0064:         )
+0065:         if st.button("Start Learning"):
+0066:             st.session_state.selected_track = track
+0067:     
+0068:     with col2:
+0069:         st.subheader("Interactive Tools")
+0070:         st.markdown("""
+0071:             Explore and experiment:
+0072:             
+0073:             - **Model Explorer**: Compare different pricing models
+0074:             - **Strategy Builder**: Build and analyze strategies
+0075:             - **Greeks Lab**: Interactive Greek exploration
+0076:             - **Volatility Tools**: Understand implied volatility
+0077:         """)
+0078:         
+0079:         tool = st.selectbox(
+0080:             "Select a Tool",
+0081:             ["Model Explorer", "Strategy Builder", "Greeks Lab", "Volatility Tools"]
+0082:         )
+0083:         if st.button("Launch Tool"):
+0084:             st.session_state.selected_tool = tool
+0085:     
+0086:     # Learning progress
+0087:     st.subheader("Your Learning Progress")
+0088:     concepts_learned = st.session_state.get('concepts_learned', [])
+0089:     
+0090:     progress = len(concepts_learned) / 20  # Example: 20 total concepts
+0091:     st.progress(progress)
+0092:     st.markdown(f"**{len(concepts_learned)}** of 20 core concepts mastered")
+0093:     
+0094:     if concepts_learned:
+0095:         st.markdown("Recently mastered concepts:")
+0096:         for concept in concepts_learned[-3:]:
+0097:             st.markdown(f"✅ {concept}")
+0098:     
+0099:     # Daily challenge
+0100:     st.subheader("Daily Challenge")
+0101:     challenges = {
+0102:         0: "Calculate the break-even point for a call option",
+0103:         1: "Explain how gamma changes as price moves",
+0104:         2: "Build a collar strategy",
+0105:         3: "Compare Black-Scholes vs Binomial prices",
+0106:         4: "Analyze a straddle's volatility exposure"
+0107:     }
+0108:     challenge = challenges[day_of_year % len(challenges)]
+0109:     
+0110:     st.info(f"🎯 **Today's Challenge**: {challenge}")
+0111:     if st.button("Try Challenge"):
+0112:         st.session_state.selected_challenge = challenge
+0113:     
+0114:     # Learning tips
+0115:     st.markdown("""
+0116:         ---
+0117:         ### 💡 Learning Tips
+0118:         
+0119:         - Start with the fundamentals before advancing
+0120:         - Use interactive tools to experiment with concepts
+0121:         - Complete daily challenges to reinforce learning
+0122:         - Review mastered concepts periodically
+0123:     """)
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\ui\pages\option_pricing.py
 // ----------------------------------------
@@ -7451,508 +7538,507 @@
 0006: 2. Rate limiting and error handling
 0007: 3. Data normalization and validation
 0008: 4. Caching and persistence
-0009: 5. Real-time data handling
-0010: """
-0011: 
-0012: import asyncio
-0013: import aiohttp
-0014: import yfinance as yf
-0015: import pandas as pd
-0016: import numpy as np
-0017: from datetime import datetime, timedelta
-0018: from typing import Dict, List, Optional, Union, Any
-0019: import logging
-0020: from pathlib import Path
-0021: import json
-0022: from dataclasses import dataclass
-0023: import time
-0024: import threading
-0025: from concurrent.futures import ThreadPoolExecutor
-0026: from ..utils.cache import Cache, cached
-0027: from ..config import AppConfig
-0028: 
-0029: logger = logging.getLogger(__name__)
-0030: 
-0031: @dataclass
-0032: class MarketQuote:
-0033:     """Container for market data quotes."""
-0034:     symbol: str
-0035:     timestamp: datetime
-0036:     bid: float
-0037:     ask: float
-0038:     last: float
-0039:     volume: int
-0040:     source: str
-0041:     
-0042:     @property
-0043:     def mid(self) -> float:
-0044:         """Calculate mid-point price."""
-0045:         return (self.bid + self.ask) / 2 if self.bid and self.ask else self.last
-0046:     
-0047:     @property
-0048:     def spread(self) -> float:
-0049:         """Calculate bid-ask spread."""
-0050:         return self.ask - self.bid if self.bid and self.ask else 0.0
-0051: 
-0052: @dataclass
-0053: class OptionQuote(MarketQuote):
-0054:     """Extended quote data for options."""
-0055:     strike: float
-0056:     expiry: datetime
-0057:     option_type: str
-0058:     underlying_price: float
-0059:     implied_volatility: float
-0060:     open_interest: int
-0061:     delta: Optional[float] = None
-0062:     gamma: Optional[float] = None
-0063:     theta: Optional[float] = None
-0064:     vega: Optional[float] = None
-0065:     rho: Optional[float] = None
-0066: 
-0067: class RateLimiter:
-0068:     """
-0069:     Thread-safe rate limiter for API calls.
-0070:     
-0071:     This ensures we don't exceed API rate limits by implementing
-0072:     token bucket algorithm with configurable rates.
-0073:     """
-0074:     
-0075:     def __init__(self, max_requests: int, time_window: float):
-0076:         """
-0077:         Initialize rate limiter.
-0078:         
-0079:         Args:
-0080:             max_requests: Maximum requests allowed in time window
-0081:             time_window: Time window in seconds
-0082:         """
-0083:         self.max_requests = max_requests
-0084:         self.time_window = time_window
-0085:         self.tokens = max_requests
-0086:         self.last_update = time.monotonic()
-0087:         self._lock = threading.Lock()
-0088:     
-0089:     def acquire(self, tokens: int = 1) -> bool:
-0090:         """
-0091:         Attempt to acquire rate limit tokens.
-0092:         
-0093:         Args:
-0094:             tokens: Number of tokens to acquire
-0095:             
-0096:         Returns:
-0097:             True if tokens were acquired, False if would exceed rate limit
-0098:         """
-0099:         with self._lock:
-0100:             now = time.monotonic()
-0101:             time_passed = now - self.last_update
-0102:             
-0103:             # Replenish tokens based on time passed
-0104:             self.tokens = min(
-0105:                 self.max_requests,
-0106:                 self.tokens + time_passed * (self.max_requests / self.time_window)
-0107:             )
-0108:             self.last_update = now
-0109:             
-0110:             if self.tokens >= tokens:
-0111:                 self.tokens -= tokens
-0112:                 return True
-0113:             return False
-0114:     
-0115:     async def acquire_async(self, tokens: int = 1) -> None:
-0116:         """
-0117:         Asynchronously acquire rate limit tokens.
-0118:         
-0119:         This will wait until tokens become available.
-0120:         """
-0121:         while not self.acquire(tokens):
-0122:             await asyncio.sleep(0.1)
-0123: 
-0124: class MarketDataClient:
-0125:     """
-0126:     Client for fetching market data from multiple sources.
-0127:     
-0128:     Features:
-0129:     - Multiple data source support
-0130:     - Automatic failover
-0131:     - Rate limiting
-0132:     - Caching
-0133:     - Async batch operations
-0134:     """
-0135:     
-0136:     def __init__(self, config: AppConfig):
-0137:         """
-0138:         Initialize market data client.
-0139:         
-0140:         Args:
-0141:             config: Application configuration
-0142:         """
-0143:         self.config = config
-0144:         self.cache = Cache(
-0145:             max_size=1000,
-0146:             default_ttl=timedelta(minutes=15),
-0147:             disk_path=Path("cache/market_data")
-0148:         )
-0149:         
-0150:         # Initialize rate limiters for different APIs
-0151:         self.rate_limiters = {
-0152:             "yahoo": RateLimiter(max_requests=2000, time_window=3600),  # 2000/hour
-0153:             "alpha_vantage": RateLimiter(max_requests=5, time_window=60),  # 5/minute
-0154:             "iex": RateLimiter(max_requests=100, time_window=60)  # 100/minute
-0155:         }
-0156:         
-0157:         # Initialize async session
-0158:         self._session = None
-0159:         self._session_lock = threading.Lock()
-0160:         self._executor = ThreadPoolExecutor(max_workers=4)
-0161:     
-0162:     async def _get_session(self) -> aiohttp.ClientSession:
-0163:         """Get or create aiohttp session."""
-0164:         if self._session is None:
-0165:             async with self._session_lock:
-0166:                 if self._session is None:
-0167:                     self._session = aiohttp.ClientSession()
-0168:         return self._session
-0169:     
-0170:     async def close(self):
-0171:         """Close client and cleanup resources."""
-0172:         if self._session:
-0173:             await self._session.close()
-0174:         self._executor.shutdown()
-0175:     
-0176:     async def get_quote(self, symbol: str, source: str = "yahoo") -> MarketQuote:
-0177:         """
-0178:         Fetch real-time quote for a symbol.
-0179:         
-0180:         Args:
-0181:             symbol: The ticker symbol
-0182:             source: Data source to use
-0183:             
-0184:         Returns:
-0185:             MarketQuote object containing latest price data
-0186:             
-0187:         Raises:
-0188:             MarketDataError: If quote cannot be fetched
-0189:         """
-0190:         cache_key = f"quote:{source}:{symbol}"
-0191:         cached_quote = self.cache.get(cache_key)
-0192:         if cached_quote:
-0193:             return cached_quote
-0194:         
-0195:         try:
-0196:             if source == "yahoo":
-0197:                 await self.rate_limiters[source].acquire_async()
-0198:                 quote = await self._fetch_yahoo_quote(symbol)
-0199:             elif source == "alpha_vantage":
-0200:                 await self.rate_limiters[source].acquire_async()
-0201:                 quote = await self._fetch_alpha_vantage_quote(symbol)
-0202:             else:
-0203:                 raise ValueError(f"Unsupported data source: {source}")
-0204:             
-0205:             self.cache.set(cache_key, quote, ttl=timedelta(seconds=30))
-0206:             return quote
-0207:         
-0208:         except Exception as e:
-0209:             logger.error(f"Failed to fetch quote for {symbol} from {source}: {str(e)}")
-0210:             raise MarketDataError(f"Quote fetch failed: {str(e)}")
-0211:     
-0212:     async def get_option_chain(self, symbol: str) -> Dict[str, List[OptionQuote]]:
-0213:         """
-0214:         Fetch complete option chain for a symbol.
-0215:         
-0216:         Returns a dictionary mapping expiration dates to lists of option quotes.
-0217:         Includes both calls and puts.
-0218:         
-0219:         Args:
-0220:             symbol: The underlying symbol
-0221:             
-0222:         Returns:
-0223:             Dictionary mapping expiry dates to lists of option quotes
-0224:         """
-0225:         cache_key = f"options:{symbol}"
-0226:         cached_chain = self.cache.get(cache_key)
-0227:         if cached_chain:
-0228:             return cached_chain
-0229:         
-0230:         try:
-0231:             # Fetch using yfinance in thread pool to avoid blocking
-0232:             def fetch_chain():
-0233:                 ticker = yf.Ticker(symbol)
-0234:                 expirations = ticker.options
-0235:                 
-0236:                 chain = {}
-0237:                 for expiry in expirations:
-0238:                     opts = ticker.option_chain(expiry)
-0239:                     chain[expiry] = []
-0240:                     
-0241:                     # Process calls
-0242:                     for _, row in opts.calls.iterrows():
-0243:                         chain[expiry].append(OptionQuote(
-0244:                             symbol=symbol,
-0245:                             timestamp=datetime.now(),
-0246:                             bid=row.bid,
-0247:                             ask=row.ask,
-0248:                             last=row.lastPrice,
-0249:                             volume=row.volume,
-0250:                             source="yahoo",
-0251:                             strike=row.strike,
-0252:                             expiry=datetime.strptime(expiry, "%Y-%m-%d"),
-0253:                             option_type="call",
-0254:                             underlying_price=ticker.info['regularMarketPrice'],
-0255:                             implied_volatility=row.impliedVolatility,
-0256:                             open_interest=row.openInterest,
-0257:                             delta=row.get('delta'),
-0258:                             gamma=row.get('gamma'),
-0259:                             theta=row.get('theta'),
-0260:                             vega=row.get('vega'),
-0261:                             rho=row.get('rho')
-0262:                         ))
-0263:                     
-0264:                     # Process puts
-0265:                     for _, row in opts.puts.iterrows():
-0266:                         chain[expiry].append(OptionQuote(
-0267:                             symbol=symbol,
-0268:                             timestamp=datetime.now(),
-0269:                             bid=row.bid,
-0270:                             ask=row.ask,
-0271:                             last=row.lastPrice,
-0272:                             volume=row.volume,
-0273:                             source="yahoo",
-0274:                             strike=row.strike,
-0275:                             expiry=datetime.strptime(expiry, "%Y-%m-%d"),
-0276:                             option_type="put",
-0277:                             underlying_price=ticker.info['regularMarketPrice'],
-0278:                             implied_volatility=row.impliedVolatility,
-0279:                             open_interest=row.openInterest,
-0280:                             delta=row.get('delta'),
-0281:                             gamma=row.get('gamma'),
-0282:                             theta=row.get('theta'),
-0283:                             vega=row.get('vega'),
-0284:                             rho=row.get('rho')
-0285:                         ))
-0286:                 
-0287:                 return chain
-0288:             
-0289:             # Execute in thread pool
-0290:             loop = asyncio.get_event_loop()
-0291:             chain = await loop.run_in_executor(self._executor, fetch_chain)
-0292:             
-0293:             # Cache for 5 minutes
-0294:             self.cache.set(cache_key, chain, ttl=timedelta(minutes=5))
-0295:             return chain
-0296:             
-0297:         except Exception as e:
-0298:             logger.error(f"Failed to fetch option chain for {symbol}: {str(e)}")
-0299:             raise MarketDataError(f"Option chain fetch failed: {str(e)}")
-0300:     
-0301:     async def get_historical_data(self, symbol: str, start_date: datetime,
-0302:                                 end_date: datetime, interval: str = "1d") -> pd.DataFrame:
-0303:         """
-0304:         Fetch historical price data for a symbol.
-0305:         
-0306:         Args:
-0307:             symbol: The ticker symbol
-0308:             start_date: Start date for historical data
-0309:             end_date: End date for historical data
-0310:             interval: Data interval (1d, 1h, etc.)
-0311:             
-0312:         Returns:
-0313:             DataFrame containing historical price data
-0314:         """
-0315:         cache_key = f"history:{symbol}:{start_date}:{end_date}:{interval}"
-0316:         cached_data = self.cache.get(cache_key)
-0317:         if cached_data is not None:
-0318:             return cached_data
-0319:         
-0320:         try:
-0321:             def fetch_history():
-0322:                 ticker = yf.Ticker(symbol)
-0323:                 df = ticker.history(
-0324:                     start=start_date,
-0325:                     end=end_date,
-0326:                     interval=interval
-0327:                 )
-0328:                 return df
-0329:             
-0330:             # Execute in thread pool
-0331:             loop = asyncio.get_event_loop()
-0332:             data = await loop.run_in_executor(self._executor, fetch_history)
-0333:             
-0334:             # Cache for 1 hour if historical data
-0335:             if interval != "1m":
-0336:                 self.cache.set(cache_key, data, ttl=timedelta(hours=1))
-0337:             
-0338:             return data
-0339:             
-0340:         except Exception as e:
-0341:             logger.error(f"Failed to fetch historical data for {symbol}: {str(e)}")
-0342:             raise MarketDataError(f"Historical data fetch failed: {str(e)}")
-0343:     
-0344:     async def _fetch_yahoo_quote(self, symbol: str) -> MarketQuote:
-0345:         """Internal method to fetch quote from Yahoo Finance."""
-0346:         async with self._get_session() as session:
-0347:             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-0348:             async with session.get(url) as response:
-0349:                 data = await response.json()
-0350:                 
-0351:                 meta = data['chart']['result'][0]['meta']
-0352:                 return MarketQuote(
-0353:                     symbol=symbol,
-0354:                     timestamp=datetime.fromtimestamp(meta['regularMarketTime']),
-0355:                     bid=meta.get('bid', 0.0),
-0356:                     ask=meta.get('ask', 0.0),
-0357:                     last=meta['regularMarketPrice'],
-0358:                     volume=meta['regularMarketVolume'],
-0359:                     source="yahoo"
-0360:                 )
-0361:     
-0362:     async def _fetch_alpha_vantage_quote(self, symbol: str) -> MarketQuote:
-0363:         """Internal method to fetch quote from Alpha Vantage."""
-0364:         api_key = self.config.get("alpha_vantage_api_key")
-0365:         if not api_key:
-0366:             raise ValueError("Alpha Vantage API key not configured")
-0367:         
-0368:         async with self._get_session() as session:
-0369:             url = f"https://www.alphavantage.co/query"
-0370:             params = {
-0371:                 "function": "GLOBAL_QUOTE",
-0372:                 "symbol": symbol,
-0373:                 "apikey": api_key
-0374:             }
-0375:             
-0376:             async with session.get(url, params=params) as response:
-0377:                 data = await response.json()
-0378:                 quote = data['Global Quote']
-0379:                 
-0380:                 return MarketQuote(
-0381:                     symbol=symbol,
-0382:                     timestamp=datetime.now(),  # AV doesn't provide timestamp
-0383:                     bid=float(quote.get('09. price', 0.0)),  # No bid/ask provided
-0384:                     ask=float(quote.get('09. price', 0.0)),
-0385:                     last=float(quote['05. price']),
-0386:                     volume=int(quote['06. volume']),
-0387:                     source="alpha_vantage"
-0388:                 )
-0389: 
-0390: class MarketDataError(Exception):
-0391:     """Custom exception for market data related errors."""
-0392:     pass
-0393: 
-0394: class MarketDataStream:
-0395:     """
-0396:     Real-time market data streaming client.
-0397:     
-0398:     This class handles websocket connections for streaming real-time
-0399:     market data updates.
-0400:     """
-0401:     
-0402:     def __init__(self, symbols: List[str], callback: callable):
-0403:         """
-0404:         Initialize streaming client.
-0405:         
-0406:         Args:
-0407:             symbols: List of symbols to stream
-0408:             callback: Callback function for data updates
-0409:         """
-0410:         self.symbols = symbols
-0411:         self.callback = callback
-0412:         self._ws = None
-0413:         self._running = False
-0414:         self._reconnect_delay = 1.0  # Initial reconnect delay
-0415:         self._max_reconnect_delay = 60.0
-0416:     
-0417:     async def start(self):
-0418:         """Start streaming market data."""
-0419:         self._running = True
-0420:         while self._running:
-0421:             try:
-0422:                 await self._connect()
-0423:                 await self._stream()
-0424:             except Exception as e:
-0425:                 logger.error(f"Streaming error: {str(e)}")
-0426:                 if self._running:
-0427:                     await asyncio.sleep(self._reconnect_delay)
-0428:                     self._reconnect_delay = min(
-0429:                         self._reconnect_delay * 2,
-0430:                         self._max_reconnect_delay
-0431:                     )
-0432:     
-0433:     async def stop(self):
-0434:         """Stop streaming market data."""
-0435:         self._running = False
-0436:         if self._ws:
-0437:             await self._ws.close()
-0438:     
-0439:     async def _connect(self):
-0440:         """Establish websocket connection."""
-0441:         session = aiohttp.ClientSession()
-0442:         self._ws = await session.ws_connect(
-0443:             'wss://streamer.finance.yahoo.com',
-0444:             heartbeat=30
-0445:         )
-0446:         
-0447:         # Subscribe to symbols
-0448:         subscribe_msg = {
-0449:             "subscribe": self.symbols
-0450:         }
-0451:         await self._ws.send_json(subscribe_msg)
-0452:         self._reconnect_delay = 1.0  # Reset reconnect delay on successful connection
-0453:     
-0454:     async def _stream(self):
-0455:         """Handle streaming data."""
-0456:         async for msg in self._ws:
-0457:             if msg.type == aiohttp.WSMsgType.TEXT:
-0458:                 data = json.loads(msg.data)
-0459:                 await self.callback(data)
-0460:             elif msg.type == aiohttp.WSMsgType.CLOSED:
-0461:                 break
-0462:             elif msg.type == aiohttp.WSMsgType.ERROR:
-0463:                 break
-0464: 
-0465: def format_market_data(quotes: Union[MarketQuote, List[MarketQuote]]) -> pd.DataFrame:
-0466:     """
-0467:     Format market data quotes into a pandas DataFrame.
-0468:     
-0469:     Args:
-0470:         quotes: Single quote or list of quotes
-0471:         
-0472:     Returns:
-0473:         DataFrame containing formatted market data
-0474:     """
-0475:     if isinstance(quotes, MarketQuote):
-0476:         quotes = [quotes]
-0477:     
-0478:     data = []
-0479:     for quote in quotes:
-0480:         row = {
-0481:             'symbol': quote.symbol,
-0482:             'timestamp': quote.timestamp,
-0483:             'bid': quote.bid,
-0484:             'ask': quote.ask,
-0485:             'last': quote.last,
-0486:             'mid': quote.mid,
-0487:             'spread': quote.spread,
-0488:             'volume': quote.volume,
-0489:             'source': quote.source
-0490:         }
-0491:         
-0492:         # Add option-specific fields if available
-0493:         if isinstance(quote, OptionQuote):
-0494:             row.update({
-0495:                 'strike': quote.strike,
-0496:                 'expiry': quote.expiry,
-0497:                 'option_type': quote.option_type,
-0498:                 'underlying_price': quote.underlying_price,
-0499:                 'implied_volatility': quote.implied_volatility,
-0500:                 'open_interest': quote.open_interest,
-0501:                 'delta': quote.delta,
-0502:                 'gamma': quote.gamma,
-0503:                 'theta': quote.theta,
-0504:                 'vega': quote.vega,
-0505:                 'rho': quote.rho
-0506:             })
-0507:         
-0508:         data.append(row)
-0509:     
-0510:     return pd.DataFrame(data)
+0009: """
+0010: 
+0011: import asyncio
+0012: import aiohttp
+0013: import yfinance as yf
+0014: import pandas as pd
+0015: import numpy as np
+0016: from datetime import datetime, timedelta
+0017: from typing import Dict, List, Optional, Union, Any
+0018: import logging
+0019: from pathlib import Path
+0020: import json
+0021: from dataclasses import dataclass
+0022: import time
+0023: import threading
+0024: from concurrent.futures import ThreadPoolExecutor
+0025: from ..utils.cache import Cache, cached
+0026: from ..config import AppConfig
+0027: 
+0028: logger = logging.getLogger(__name__)
+0029: 
+0030: @dataclass
+0031: class MarketQuote:
+0032:     """Container for market data quotes."""
+0033:     symbol: str
+0034:     timestamp: datetime
+0035:     bid: float
+0036:     ask: float
+0037:     last: float
+0038:     volume: int
+0039:     source: str
+0040:     
+0041:     @property
+0042:     def mid(self) -> float:
+0043:         """Calculate mid-point price."""
+0044:         return (self.bid + self.ask) / 2 if self.bid and self.ask else self.last
+0045:     
+0046:     @property
+0047:     def spread(self) -> float:
+0048:         """Calculate bid-ask spread."""
+0049:         return self.ask - self.bid if self.bid and self.ask else 0.0
+0050: 
+0051: @dataclass
+0052: class OptionQuote(MarketQuote):
+0053:     """Extended quote data for options."""
+0054:     strike: float
+0055:     expiry: datetime
+0056:     option_type: str
+0057:     underlying_price: float
+0058:     implied_volatility: float
+0059:     open_interest: int
+0060:     delta: Optional[float] = None
+0061:     gamma: Optional[float] = None
+0062:     theta: Optional[float] = None
+0063:     vega: Optional[float] = None
+0064:     rho: Optional[float] = None
+0065: 
+0066: class RateLimiter:
+0067:     """
+0068:     Thread-safe rate limiter for API calls.
+0069:     
+0070:     This ensures we don't exceed API rate limits by implementing
+0071:     token bucket algorithm with configurable rates.
+0072:     """
+0073:     
+0074:     def __init__(self, max_requests: int, time_window: float):
+0075:         """
+0076:         Initialize rate limiter.
+0077:         
+0078:         Args:
+0079:             max_requests: Maximum requests allowed in time window
+0080:             time_window: Time window in seconds
+0081:         """
+0082:         self.max_requests = max_requests
+0083:         self.time_window = time_window
+0084:         self.tokens = max_requests
+0085:         self.last_update = time.monotonic()
+0086:         self._lock = threading.Lock()
+0087:     
+0088:     def acquire(self, tokens: int = 1) -> bool:
+0089:         """
+0090:         Attempt to acquire rate limit tokens.
+0091:         
+0092:         Args:
+0093:             tokens: Number of tokens to acquire
+0094:             
+0095:         Returns:
+0096:             True if tokens were acquired, False if would exceed rate limit
+0097:         """
+0098:         with self._lock:
+0099:             now = time.monotonic()
+0100:             time_passed = now - self.last_update
+0101:             
+0102:             # Replenish tokens based on time passed
+0103:             self.tokens = min(
+0104:                 self.max_requests,
+0105:                 self.tokens + time_passed * (self.max_requests / self.time_window)
+0106:             )
+0107:             self.last_update = now
+0108:             
+0109:             if self.tokens >= tokens:
+0110:                 self.tokens -= tokens
+0111:                 return True
+0112:             return False
+0113:     
+0114:     async def acquire_async(self, tokens: int = 1) -> None:
+0115:         """
+0116:         Asynchronously acquire rate limit tokens.
+0117:         
+0118:         This will wait until tokens become available.
+0119:         """
+0120:         while not self.acquire(tokens):
+0121:             await asyncio.sleep(0.1)
+0122: 
+0123: class MarketDataClient:
+0124:     """
+0125:     Client for fetching market data from multiple sources.
+0126:     
+0127:     Features:
+0128:     - Multiple data source support
+0129:     - Automatic failover
+0130:     - Rate limiting
+0131:     - Caching
+0132:     - Async batch operations
+0133:     """
+0134:     
+0135:     def __init__(self, config: AppConfig):
+0136:         """
+0137:         Initialize market data client.
+0138:         
+0139:         Args:
+0140:             config: Application configuration
+0141:         """
+0142:         self.config = config
+0143:         self.cache = Cache(
+0144:             max_size=1000,
+0145:             default_ttl=timedelta(minutes=15),
+0146:             disk_path=Path("cache/market_data")
+0147:         )
+0148:         
+0149:         # Initialize rate limiters for different APIs
+0150:         self.rate_limiters = {
+0151:             "yahoo": RateLimiter(max_requests=2000, time_window=3600),  # 2000/hour
+0152:             "alpha_vantage": RateLimiter(max_requests=5, time_window=60),  # 5/minute
+0153:             "iex": RateLimiter(max_requests=100, time_window=60)  # 100/minute
+0154:         }
+0155:         
+0156:         # Initialize async session
+0157:         self._session = None
+0158:         self._session_lock = threading.Lock()
+0159:         self._executor = ThreadPoolExecutor(max_workers=4)
+0160:     
+0161:     async def _get_session(self) -> aiohttp.ClientSession:
+0162:         """Get or create aiohttp session."""
+0163:         if self._session is None:
+0164:             async with self._session_lock:
+0165:                 if self._session is None:
+0166:                     self._session = aiohttp.ClientSession()
+0167:         return self._session
+0168:     
+0169:     async def close(self):
+0170:         """Close client and cleanup resources."""
+0171:         if self._session:
+0172:             await self._session.close()
+0173:         self._executor.shutdown()
+0174:     
+0175:     async def get_quote(self, symbol: str, source: str = "yahoo") -> MarketQuote:
+0176:         """
+0177:         Fetch real-time quote for a symbol.
+0178:         
+0179:         Args:
+0180:             symbol: The ticker symbol
+0181:             source: Data source to use
+0182:             
+0183:         Returns:
+0184:             MarketQuote object containing latest price data
+0185:             
+0186:         Raises:
+0187:             MarketDataError: If quote cannot be fetched
+0188:         """
+0189:         cache_key = f"quote:{source}:{symbol}"
+0190:         cached_quote = self.cache.get(cache_key)
+0191:         if cached_quote:
+0192:             return cached_quote
+0193:         
+0194:         try:
+0195:             if source == "yahoo":
+0196:                 await self.rate_limiters[source].acquire_async()
+0197:                 quote = await self._fetch_yahoo_quote(symbol)
+0198:             elif source == "alpha_vantage":
+0199:                 await self.rate_limiters[source].acquire_async()
+0200:                 quote = await self._fetch_alpha_vantage_quote(symbol)
+0201:             else:
+0202:                 raise ValueError(f"Unsupported data source: {source}")
+0203:             
+0204:             self.cache.set(cache_key, quote, ttl=timedelta(seconds=30))
+0205:             return quote
+0206:         
+0207:         except Exception as e:
+0208:             logger.error(f"Failed to fetch quote for {symbol} from {source}: {str(e)}")
+0209:             raise MarketDataError(f"Quote fetch failed: {str(e)}")
+0210:     
+0211:     async def get_option_chain(self, symbol: str) -> Dict[str, List[OptionQuote]]:
+0212:         """
+0213:         Fetch complete option chain for a symbol.
+0214:         
+0215:         Returns a dictionary mapping expiration dates to lists of option quotes.
+0216:         Includes both calls and puts.
+0217:         
+0218:         Args:
+0219:             symbol: The underlying symbol
+0220:             
+0221:         Returns:
+0222:             Dictionary mapping expiry dates to lists of option quotes
+0223:         """
+0224:         cache_key = f"options:{symbol}"
+0225:         cached_chain = self.cache.get(cache_key)
+0226:         if cached_chain:
+0227:             return cached_chain
+0228:         
+0229:         try:
+0230:             # Fetch using yfinance in thread pool to avoid blocking
+0231:             def fetch_chain():
+0232:                 ticker = yf.Ticker(symbol)
+0233:                 expirations = ticker.options
+0234:                 
+0235:                 chain = {}
+0236:                 for expiry in expirations:
+0237:                     opts = ticker.option_chain(expiry)
+0238:                     chain[expiry] = []
+0239:                     
+0240:                     # Process calls
+0241:                     for _, row in opts.calls.iterrows():
+0242:                         chain[expiry].append(OptionQuote(
+0243:                             symbol=symbol,
+0244:                             timestamp=datetime.now(),
+0245:                             bid=row.bid,
+0246:                             ask=row.ask,
+0247:                             last=row.lastPrice,
+0248:                             volume=row.volume,
+0249:                             source="yahoo",
+0250:                             strike=row.strike,
+0251:                             expiry=datetime.strptime(expiry, "%Y-%m-%d"),
+0252:                             option_type="call",
+0253:                             underlying_price=ticker.info['regularMarketPrice'],
+0254:                             implied_volatility=row.impliedVolatility,
+0255:                             open_interest=row.openInterest,
+0256:                             delta=row.get('delta'),
+0257:                             gamma=row.get('gamma'),
+0258:                             theta=row.get('theta'),
+0259:                             vega=row.get('vega'),
+0260:                             rho=row.get('rho')
+0261:                         ))
+0262:                     
+0263:                     # Process puts
+0264:                     for _, row in opts.puts.iterrows():
+0265:                         chain[expiry].append(OptionQuote(
+0266:                             symbol=symbol,
+0267:                             timestamp=datetime.now(),
+0268:                             bid=row.bid,
+0269:                             ask=row.ask,
+0270:                             last=row.lastPrice,
+0271:                             volume=row.volume,
+0272:                             source="yahoo",
+0273:                             strike=row.strike,
+0274:                             expiry=datetime.strptime(expiry, "%Y-%m-%d"),
+0275:                             option_type="put",
+0276:                             underlying_price=ticker.info['regularMarketPrice'],
+0277:                             implied_volatility=row.impliedVolatility,
+0278:                             open_interest=row.openInterest,
+0279:                             delta=row.get('delta'),
+0280:                             gamma=row.get('gamma'),
+0281:                             theta=row.get('theta'),
+0282:                             vega=row.get('vega'),
+0283:                             rho=row.get('rho')
+0284:                         ))
+0285:                 
+0286:                 return chain
+0287:             
+0288:             # Execute in thread pool
+0289:             loop = asyncio.get_event_loop()
+0290:             chain = await loop.run_in_executor(self._executor, fetch_chain)
+0291:             
+0292:             # Cache for 5 minutes
+0293:             self.cache.set(cache_key, chain, ttl=timedelta(minutes=5))
+0294:             return chain
+0295:             
+0296:         except Exception as e:
+0297:             logger.error(f"Failed to fetch option chain for {symbol}: {str(e)}")
+0298:             raise MarketDataError(f"Option chain fetch failed: {str(e)}")
+0299:     
+0300:     async def get_historical_data(self, symbol: str, start_date: datetime,
+0301:                                 end_date: datetime, interval: str = "1d") -> pd.DataFrame:
+0302:         """
+0303:         Fetch historical price data for a symbol.
+0304:         
+0305:         Args:
+0306:             symbol: The ticker symbol
+0307:             start_date: Start date for historical data
+0308:             end_date: End date for historical data
+0309:             interval: Data interval (1d, 1h, etc.)
+0310:             
+0311:         Returns:
+0312:             DataFrame containing historical price data
+0313:         """
+0314:         cache_key = f"history:{symbol}:{start_date}:{end_date}:{interval}"
+0315:         cached_data = self.cache.get(cache_key)
+0316:         if cached_data is not None:
+0317:             return cached_data
+0318:         
+0319:         try:
+0320:             def fetch_history():
+0321:                 ticker = yf.Ticker(symbol)
+0322:                 df = ticker.history(
+0323:                     start=start_date,
+0324:                     end=end_date,
+0325:                     interval=interval
+0326:                 )
+0327:                 return df
+0328:             
+0329:             # Execute in thread pool
+0330:             loop = asyncio.get_event_loop()
+0331:             data = await loop.run_in_executor(self._executor, fetch_history)
+0332:             
+0333:             # Cache for 1 hour if historical data
+0334:             if interval != "1m":
+0335:                 self.cache.set(cache_key, data, ttl=timedelta(hours=1))
+0336:             
+0337:             return data
+0338:             
+0339:         except Exception as e:
+0340:             logger.error(f"Failed to fetch historical data for {symbol}: {str(e)}")
+0341:             raise MarketDataError(f"Historical data fetch failed: {str(e)}")
+0342:     
+0343:     async def _fetch_yahoo_quote(self, symbol: str) -> MarketQuote:
+0344:         """Internal method to fetch quote from Yahoo Finance."""
+0345:         async with self._get_session() as session:
+0346:             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+0347:             async with session.get(url) as response:
+0348:                 data = await response.json()
+0349:                 
+0350:                 meta = data['chart']['result'][0]['meta']
+0351:                 return MarketQuote(
+0352:                     symbol=symbol,
+0353:                     timestamp=datetime.fromtimestamp(meta['regularMarketTime']),
+0354:                     bid=meta.get('bid', 0.0),
+0355:                     ask=meta.get('ask', 0.0),
+0356:                     last=meta['regularMarketPrice'],
+0357:                     volume=meta['regularMarketVolume'],
+0358:                     source="yahoo"
+0359:                 )
+0360:     
+0361:     async def _fetch_alpha_vantage_quote(self, symbol: str) -> MarketQuote:
+0362:         """Internal method to fetch quote from Alpha Vantage."""
+0363:         api_key = self.config.get("alpha_vantage_api_key")
+0364:         if not api_key:
+0365:             raise ValueError("Alpha Vantage API key not configured")
+0366:         
+0367:         async with self._get_session() as session:
+0368:             url = f"https://www.alphavantage.co/query"
+0369:             params = {
+0370:                 "function": "GLOBAL_QUOTE",
+0371:                 "symbol": symbol,
+0372:                 "apikey": api_key
+0373:             }
+0374:             
+0375:             async with session.get(url, params=params) as response:
+0376:                 data = await response.json()
+0377:                 quote = data['Global Quote']
+0378:                 
+0379:                 return MarketQuote(
+0380:                     symbol=symbol,
+0381:                     timestamp=datetime.now(),  # AV doesn't provide timestamp
+0382:                     bid=float(quote.get('09. price', 0.0)),  # No bid/ask provided
+0383:                     ask=float(quote.get('09. price', 0.0)),
+0384:                     last=float(quote['05. price']),
+0385:                     volume=int(quote['06. volume']),
+0386:                     source="alpha_vantage"
+0387:                 )
+0388: 
+0389: class MarketDataError(Exception):
+0390:     """Custom exception for market data related errors."""
+0391:     pass
+0392: 
+0393: class MarketDataStream:
+0394:     """
+0395:     Real-time market data streaming client.
+0396:     
+0397:     This class handles websocket connections for streaming real-time
+0398:     market data updates.
+0399:     """
+0400:     
+0401:     def __init__(self, symbols: List[str], callback: callable):
+0402:         """
+0403:         Initialize streaming client.
+0404:         
+0405:         Args:
+0406:             symbols: List of symbols to stream
+0407:             callback: Callback function for data updates
+0408:         """
+0409:         self.symbols = symbols
+0410:         self.callback = callback
+0411:         self._ws = None
+0412:         self._running = False
+0413:         self._reconnect_delay = 1.0  # Initial reconnect delay
+0414:         self._max_reconnect_delay = 60.0
+0415:     
+0416:     async def start(self):
+0417:         """Start streaming market data."""
+0418:         self._running = True
+0419:         while self._running:
+0420:             try:
+0421:                 await self._connect()
+0422:                 await self._stream()
+0423:             except Exception as e:
+0424:                 logger.error(f"Streaming error: {str(e)}")
+0425:                 if self._running:
+0426:                     await asyncio.sleep(self._reconnect_delay)
+0427:                     self._reconnect_delay = min(
+0428:                         self._reconnect_delay * 2,
+0429:                         self._max_reconnect_delay
+0430:                     )
+0431:     
+0432:     async def stop(self):
+0433:         """Stop streaming market data."""
+0434:         self._running = False
+0435:         if self._ws:
+0436:             await self._ws.close()
+0437:     
+0438:     async def _connect(self):
+0439:         """Establish websocket connection."""
+0440:         session = aiohttp.ClientSession()
+0441:         self._ws = await session.ws_connect(
+0442:             'wss://streamer.finance.yahoo.com',
+0443:             heartbeat=30
+0444:         )
+0445:         
+0446:         # Subscribe to symbols
+0447:         subscribe_msg = {
+0448:             "subscribe": self.symbols
+0449:         }
+0450:         await self._ws.send_json(subscribe_msg)
+0451:         self._reconnect_delay = 1.0  # Reset reconnect delay on successful connection
+0452:     
+0453:     async def _stream(self):
+0454:         """Handle streaming data."""
+0455:         async for msg in self._ws:
+0456:             if msg.type == aiohttp.WSMsgType.TEXT:
+0457:                 data = json.loads(msg.data)
+0458:                 await self.callback(data)
+0459:             elif msg.type == aiohttp.WSMsgType.CLOSED:
+0460:                 break
+0461:             elif msg.type == aiohttp.WSMsgType.ERROR:
+0462:                 break
+0463: 
+0464: def format_market_data(quotes: Union[MarketQuote, List[MarketQuote]]) -> pd.DataFrame:
+0465:     """
+0466:     Format market data quotes into a pandas DataFrame.
+0467:     
+0468:     Args:
+0469:         quotes: Single quote or list of quotes
+0470:         
+0471:     Returns:
+0472:         DataFrame containing formatted market data
+0473:     """
+0474:     if isinstance(quotes, MarketQuote):
+0475:         quotes = [quotes]
+0476:     
+0477:     data = []
+0478:     for quote in quotes:
+0479:         row = {
+0480:             'symbol': quote.symbol,
+0481:             'timestamp': quote.timestamp,
+0482:             'bid': quote.bid,
+0483:             'ask': quote.ask,
+0484:             'last': quote.last,
+0485:             'mid': quote.mid,
+0486:             'spread': quote.spread,
+0487:             'volume': quote.volume,
+0488:             'source': quote.source
+0489:         }
+0490:         
+0491:         # Add option-specific fields if available
+0492:         if isinstance(quote, OptionQuote):
+0493:             row.update({
+0494:                 'strike': quote.strike,
+0495:                 'expiry': quote.expiry,
+0496:                 'option_type': quote.option_type,
+0497:                 'underlying_price': quote.underlying_price,
+0498:                 'implied_volatility': quote.implied_volatility,
+0499:                 'open_interest': quote.open_interest,
+0500:                 'delta': quote.delta,
+0501:                 'gamma': quote.gamma,
+0502:                 'theta': quote.theta,
+0503:                 'vega': quote.vega,
+0504:                 'rho': quote.rho
+0505:             })
+0506:         
+0507:         data.append(row)
+0508:     
+0509:     return pd.DataFrame(data)
 
 // File: C:\Users\aluja\Desktop\OptionVisualizer\src\utils\validators.py
 // ----------------------------------------

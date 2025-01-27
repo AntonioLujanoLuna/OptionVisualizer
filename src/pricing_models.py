@@ -368,3 +368,108 @@ def option_price(S: float, K: float, r: float, sigma: float, T: float,
     
     else:
         raise ValueError(f"Unknown model: {model}")
+
+def black_scholes_greeks_call(S: float, K: float, r: float, sigma: float, T: float) -> Dict[str, float]:
+    """
+    Calculate Greeks for a call option using Black-Scholes model.
+    
+    Args:
+        S: Current stock price
+        K: Strike price
+        r: Risk-free rate (annualized)
+        sigma: Volatility (annualized)
+        T: Time to maturity (in years)
+        
+    Returns:
+        Dictionary containing all Greeks values
+    """
+    if T <= 0:
+        return {
+            'delta': 1.0 if S > K else 0.0,
+            'gamma': 0.0,
+            'theta': 0.0,
+            'vega': 0.0,
+            'rho': 0.0
+        }
+    
+    # Calculate d1 and d2
+    sqrt_T = np.sqrt(T)
+    d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
+    d2 = d1 - sigma * sqrt_T
+    
+    # Common terms
+    nd1 = norm.pdf(d1)
+    Nd1 = norm.cdf(d1)
+    Nd2 = norm.cdf(d2)
+    exp_rt = np.exp(-r * T)
+    
+    # Calculate Greeks
+    delta = Nd1
+    gamma = nd1 / (S * sigma * sqrt_T)
+    theta = (-S * nd1 * sigma / (2 * sqrt_T) -
+             r * K * exp_rt * Nd2)
+    vega = S * sqrt_T * nd1
+    rho = K * T * exp_rt * Nd2
+    
+    return {
+        'delta': delta,
+        'gamma': gamma,
+        'theta': theta,
+        'vega': vega,
+        'rho': rho
+    }
+
+def black_scholes_greeks_put(S: float, K: float, r: float, sigma: float, T: float) -> Dict[str, float]:
+    """
+    Calculate Greeks for a put option using Black-Scholes model.
+    
+    Args:
+        S: Current stock price
+        K: Strike price
+        r: Risk-free rate (annualized)
+        sigma: Volatility (annualized)
+        T: Time to maturity (in years)
+        
+    Returns:
+        Dictionary containing all Greeks values
+    """
+    if T <= 0:
+        return {
+            'delta': -1.0 if S < K else 0.0,
+            'gamma': 0.0,
+            'theta': 0.0,
+            'vega': 0.0,
+            'rho': 0.0
+        }
+    
+    # Calculate d1 and d2
+    sqrt_T = np.sqrt(T)
+    d1 = (np.log(S/K) + (r + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
+    d2 = d1 - sigma * sqrt_T
+    
+    # Common terms
+    nd1 = norm.pdf(d1)
+    Nd1 = norm.cdf(-d1)  # Note the negative d1 for puts
+    Nd2 = norm.cdf(-d2)  # Note the negative d2 for puts
+    exp_rt = np.exp(-r * T)
+    
+    # Calculate Greeks
+    delta = -Nd1  # Negative of the call delta
+    gamma = nd1 / (S * sigma * sqrt_T)  # Same as call
+    theta = (-S * nd1 * sigma / (2 * sqrt_T) +
+             r * K * exp_rt * Nd2)
+    vega = S * sqrt_T * nd1  # Same as call
+    rho = -K * T * exp_rt * Nd2  # Negative of call rho
+    
+    return {
+        'delta': delta,
+        'gamma': gamma,
+        'theta': theta,
+        'vega': vega,
+        'rho': rho
+    }
+
+# Add these imports at the top of the file if not already present
+import numpy as np
+from scipy.stats import norm
+from typing import Dict
