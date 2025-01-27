@@ -67,4 +67,14 @@ class StrategyBuilder:
                         st.write(f"{leg.position.title()} {abs(leg.quantity)} "
                                  f"{leg.option_params.option_type.title()}")
                     with col2:
-                        st.write(f"Strike: ${leg.option_params
+                        st.write(f"Strike: ${leg.option_params.strike_price:.2f}") # Corrected line
+                    with col3:
+                        if st.button("Remove", key=f"remove_{i}"):
+                            st.session_state.strategy_legs.pop(i)
+                            st.experimental_rerun()
+        
+        return st.session_state.strategy_legs
+    
+def render_page():
+    builder = StrategyBuilder()
+    builder.render()
