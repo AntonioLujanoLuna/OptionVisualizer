@@ -1,7 +1,7 @@
 # src/models/black_scholes.py
 
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 import logging
 from scipy.stats import norm
