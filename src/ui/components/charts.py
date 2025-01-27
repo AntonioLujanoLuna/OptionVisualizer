@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 from typing import List, Optional
-from src.analytics.risk import Position # Relative import (still works within the same package)
+from ..analytics.risk import Position # Relative import (still works within the same package)
 
 class OptionPayoffChart:
     """Component for displaying option payoff and risk profiles."""

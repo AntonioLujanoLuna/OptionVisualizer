@@ -6,9 +6,9 @@ from dataclasses import dataclass
 import logging
 from scipy.stats import norm
 
-from src.models.base import OptionPricingModel, OptionResult
-from src.utils.validation import validate_parameters
-from src.config import AppConfig
+from ..models.base import OptionPricingModel, OptionResult
+from ..utils.validation import validate_parameters
+from ..config import AppConfig
 
 @dataclass
 class BlackScholesParameters:

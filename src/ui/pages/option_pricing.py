@@ -1,7 +1,7 @@
 # src/ui/pages/option_pricing.py
 import streamlit as st
-from src.ui.components.option_inputs import OptionInputs # Relative import (still works within the same package)
-from src.models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
+from ..ui.components.option_inputs import OptionInputs # Relative import (still works within the same package)
+from ..models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
 
 def render_page():
     """Render the option pricing analysis page."""

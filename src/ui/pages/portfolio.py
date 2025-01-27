@@ -3,10 +3,10 @@
 import streamlit as st
 import pandas as pd
 from typing import List
-from src.ui.components.portfolio_table import PortfolioTable # Relative import (still works within the same package)
-from src.ui.components.charts import OptionPayoffChart # Relative import (still works within the same package)
-from src.analytics.risk import Position, RiskAnalyzer # Relative import (still works within the same package)
-from src.models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
+from ..ui.components.portfolio_table import PortfolioTable # Relative import (still works within the same package)
+from ..ui.components.charts import OptionPayoffChart # Relative import (still works within the same package)
+from ..analytics.risk import Position, RiskAnalyzer # Relative import (still works within the same package)
+from ..models.black_scholes import BlackScholesModel # Relative import (still works within the same package)
 
 def render_page():
     """
@@ -110,17 +110,19 @@ def _render_file_upload():
 def _render_portfolio_analysis():
     """Render portfolio analysis section."""
     st.subheader("Portfolio Analysis")
-    
+
     # Display current positions
     portfolio_table = PortfolioTable(st.session_state.portfolio_positions)
     portfolio_table.render()
-    
-    # Initialize risk analyzer
+
+    # Initialize risk analyzer with Black-Scholes model
     risk_analyzer = RiskAnalyzer(BlackScholesModel())
+
+    # Calculate risk metrics
     risk_metrics = risk_analyzer.calculate_portfolio_risk(
         st.session_state.portfolio_positions
     )
-    
+
     # Display risk metrics
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -129,17 +131,17 @@ def _render_portfolio_analysis():
         st.metric("Value at Risk (95%)", f"${risk_metrics.value_at_risk:.2f}")
     with col3:
         st.metric("Expected Shortfall", f"${risk_metrics.expected_shortfall:.2f}")
-    
+
     # Display payoff chart
     payoff_chart = OptionPayoffChart()
     fig = payoff_chart.create_payoff_chart(st.session_state.portfolio_positions)
     st.plotly_chart(fig, use_container_width=True)
-    
+
     # Stress test results
     if risk_metrics.stress_scenarios:
         st.subheader("Stress Test Results")
         scenarios_df = pd.DataFrame.from_dict(
-            risk_metrics.stress_scenarios, 
+            risk_metrics.stress_scenarios,
             orient='index',
             columns=['P&L Impact']
         )

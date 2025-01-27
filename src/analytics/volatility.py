@@ -2,12 +2,14 @@
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict
 from scipy.interpolate import interp2d
 from scipy.optimize import minimize
 import pandas as pd
 
-from src.config import AppConfig # Relative import (still works within the same package)
+from ..config import AppConfig
+from ..models.black_scholes import BlackScholesModel
+
 
 @dataclass
 class VolatilitySurface:
@@ -53,8 +55,8 @@ class VolatilitySurface:
         return self.interpolation_func(strike, expiry)[0]
 
     def calibrate_to_market(self, market_prices: pd.DataFrame,
-                            model: 'OptionPricingModel',
-                            method: str = 'Nelder-Mead') -> None:
+                             model: 'OptionPricingModel',
+                             method: str = 'Nelder-Mead') -> None:
         """
         Calibrate the volatility surface to observed market prices.
 
@@ -147,8 +149,8 @@ class VolatilityAnalyzer:
         self.model = pricing_model
 
     def calculate_implied_volatility(self, option_price: float, strike: float,
-                                    expiry: float, option_type: str,
-                                    method: str = 'brentq') -> float:
+                                     expiry: float, option_type: str,
+                                     method: str = 'brentq') -> float:
         """
         Calculate the implied volatility of an option using numerical methods.
 
@@ -157,3 +159,13 @@ class VolatilityAnalyzer:
             strike: Strike price of the option
             expiry: Time to expiry of the option in years
             option_type: Type of the option ('call' or 'put')
+        """
+        # Using the implied_volatility method of the BlackScholesModel
+        if option_type.lower() == "call":
+            iv = self.model.implied_volatility(option_price, self.model.S, strike, self.model.r, expiry, option_type)
+        elif option_type.lower() == "put":
+            iv = self.model.implied_volatility(option_price, self.model.S, strike, self.model.r, expiry, option_type)
+        else:
+            raise ValueError("Invalid option_type. Must be 'call' or 'put'")
+
+        return iv

@@ -6,8 +6,8 @@ from plotly.subplots import make_subplots
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
-from src.analytics.risk import Position, RiskMetrics
-from src.config import AppConfig
+from .risk import Position, RiskMetrics
+from ..config import AppConfig
 
 class PortfolioVisualizer:
     """
