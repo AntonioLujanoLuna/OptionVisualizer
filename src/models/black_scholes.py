@@ -13,12 +13,13 @@ from src.config import AppConfig
 @dataclass
 class BlackScholesParameters:
     """Parameters used in the Black-Scholes model."""
-    S: float      # Current stock price
-    K: float      # Strike price
-    r: float      # Risk-free interest rate
-    sigma: float  # Volatility of the underlying asset
-    T: float      # Time to maturity in years
-    q: float      # Dividend yield
+    S: float       # Current stock price
+    K: float       # Strike price
+    r: float       # Risk-free interest rate
+    sigma: float   # Volatility of the underlying asset
+    T: float       # Time to maturity in years
+    q: float       # Dividend yield
+    option_type: str = "call" # Option type, either call or put
 
 class BlackScholesModel(OptionPricingModel):
     """
@@ -52,12 +53,14 @@ class BlackScholesModel(OptionPricingModel):
         else:
             self.logger.setLevel(logging.WARNING)
     
+    # src/models/black_scholes.py
+
     @validate_parameters
     def price_call(self, S: float, K: float, r: float, sigma: float, T: float,
                    q: Optional[float] = None) -> OptionResult:
         """
         Price a European call option using the Black-Scholes formula.
-        
+
         Parameters:
         - S: Current stock price
         - K: Strike price
@@ -65,19 +68,19 @@ class BlackScholesModel(OptionPricingModel):
         - sigma: Volatility of the underlying asset
         - T: Time to maturity in years
         - q: Dividend yield (optional, defaults to model's q)
-        
+
         Returns:
         - OptionResult containing the price, Greeks, and additional information.
         """
         q = self.q if q is None else q
-        params = BlackScholesParameters(S, K, r, sigma, T, q)
+        params = BlackScholesParameters(S, K, r, sigma, T, q, option_type='call') # Added option_type
         self.logger.info(f"Pricing European Call with parameters: {params}")
-        
+
         d1, d2 = self._calculate_d1_d2(params)
         call_price = (S * np.exp(-q * T) * norm.cdf(d1)) - (K * np.exp(-r * T) * norm.cdf(d2))
-        
+
         greeks = self._calculate_greeks(d1, d2, params)
-        
+
         return OptionResult(
             price=call_price,
             greeks=greeks,
@@ -87,10 +90,9 @@ class BlackScholesModel(OptionPricingModel):
                 "parameters": params
             }
         )
-    
     @validate_parameters
     def price_put(self, S: float, K: float, r: float, sigma: float, T: float,
-                 q: Optional[float] = None) -> OptionResult:
+                    q: Optional[float] = None) -> OptionResult:
         """
         Price a European put option using the Black-Scholes formula.
         
@@ -106,7 +108,7 @@ class BlackScholesModel(OptionPricingModel):
         - OptionResult containing the price, Greeks, and additional information.
         """
         q = self.q if q is None else q
-        params = BlackScholesParameters(S, K, r, sigma, T, q)
+        params = BlackScholesParameters(S, K, r, sigma, T, q, option_type='put') # Added option_type
         self.logger.info(f"Pricing European Put with parameters: {params}")
         
         d1, d2 = self._calculate_d1_d2(params)
@@ -117,12 +119,35 @@ class BlackScholesModel(OptionPricingModel):
         return OptionResult(
             price=put_price,
             greeks=greeks,
-            error_estimate=None,  # Analytical model has no simulation error
+            error_estimate=None, # Analytical model has no simulation error
             additional_info={
                 "model": "Black-Scholes",
                 "parameters": params
             }
         )
+    def calculate_greeks(self, S: float, K: float, r: float, sigma: float,
+                         T: float, option_type: str = "call",
+                         q: Optional[float] = None) -> Dict[str, float]:
+        """
+        Calculate option Greeks analytically.
+
+        Parameters:
+        - S: Current stock price
+        - K: Strike price
+        - r: Risk-free interest rate
+        - sigma: Volatility of the underlying asset
+        - T: Time to maturity in years
+        - option_type: 'call' or 'put'
+        - q: Dividend yield (optional, defaults to model's q)
+
+        Returns:
+        - Dictionary containing Delta, Gamma, Theta, Vega, and Rho.
+        """
+        q = self.q if q is None else q
+        params = BlackScholesParameters(S, K, r, sigma, T, q, option_type) # Added option_type
+        d1, d2 = self._calculate_d1_d2(params)
+        greeks = self._calculate_greeks(d1, d2, params)
+        return greeks
     
     def _calculate_d1_d2(self, params: BlackScholesParameters) -> Tuple[float, float]:
         """
@@ -257,30 +282,6 @@ class BlackScholesModel(OptionPricingModel):
         vega = params.S * np.exp(-params.q * params.T) * norm.pdf(d1) * np.sqrt(params.T)
         self.logger.debug(f"Calculated Vega: {vega}")
         return vega
-    
-    def calculate_greeks(self, S: float, K: float, r: float, sigma: float,
-                        T: float, option_type: str = "call",
-                        q: Optional[float] = None) -> Dict[str, float]:
-        """
-        Calculate option Greeks analytically.
-        
-        Parameters:
-        - S: Current stock price
-        - K: Strike price
-        - r: Risk-free interest rate
-        - sigma: Volatility of the underlying asset
-        - T: Time to maturity in years
-        - option_type: 'call' or 'put'
-        - q: Dividend yield (optional, defaults to model's q)
-        
-        Returns:
-        - Dictionary containing Delta, Gamma, Theta, Vega, and Rho.
-        """
-        q = self.q if q is None else q
-        params = BlackScholesParameters(S, K, r, sigma, T, q)
-        d1, d2 = self._calculate_d1_d2(params)
-        greeks = self._calculate_greeks(d1, d2, params)
-        return greeks
     
     @validate_parameters
     def implied_volatility(self, option_price: float, S: float, K: float, r: float, T: float,
