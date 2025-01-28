@@ -459,25 +459,34 @@ class OptionVisualizerApp:
         )
     
     def _calculate_model_results(self, models, S, K, T, sigma, r, option_type):
-        """Calculate option prices using the selected models."""
+        """Calculate option prices and Greeks using the selected models."""
         results = {}
         for model_name in models:
             if model_name == "Black-Scholes":
-                model = BlackScholesModel()
+                model = self.black_scholes
                 if option_type == 'call':
-                    results[model_name] = model.price_call(S, K, r, sigma, T)
+                    price_result = model.price_call(S, K, r, sigma, T)
                 else:
-                    results[model_name] = model.price_put(S, K, r, sigma, T)
+                    price_result = model.price_put(S, K, r, sigma, T)
+                # Calculate Greeks separately
+                greeks = model.calculate_greeks(S, K, r, sigma, T, option_type)
+                results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
+
             elif model_name == "Binomial":
-                model = BinomialModel()
+                model = self.binomial
                 # Assuming pricing for European options here
-                results[model_name] = model.price_european(S, K, r, sigma, T, option_type)
+                price_result = model.price_european(S, K, r, sigma, T, option_type)
+                greeks = model.calculate_greeks(S, K, r, sigma, T, option_type)
+                results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
+
             elif model_name == "Monte Carlo":
-                model = MonteCarloModel()
+                model = self.monte_carlo
                 if option_type == 'call':
-                    results[model_name] = model.price_call(S, K, r, sigma, T)
+                    price_result = model.price_call(S, K, r, sigma, T)
                 else:
-                    results[model_name] = model.price_put(S, K, r, sigma, T)
+                    price_result = model.price_put(S, K, r, sigma, T)
+                greeks = model.calculate_greeks(S, K, r, sigma, T, option_type)
+                results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
         return results
 
     def _display_pricing_results(self, results):

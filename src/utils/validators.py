@@ -413,17 +413,19 @@ class DataFrameValidator:
         if self.errors:
             raise ValidationError("\n".join(self.errors))
 
+# src/utils/validators.py (modified)
+
 def validate_parameters(func: Callable) -> Callable:
     """
     Generic parameter validation decorator.
-    
+
     This decorator checks that function parameters meet specified criteria
     using type hints and optional validation rules.
     """
     @wraps(func)
-    def wrapper(self, *args, **kwargs):  # Added self here
+    def wrapper(*args, **kwargs):  # Remove self from here
         sig = inspect.signature(func)
-        bound_args = sig.bind(self, *args, **kwargs)  # Bind self to the signature
+        bound_args = sig.bind(*args, **kwargs)  # Bind self to the signature
         bound_args.apply_defaults()
 
         # Get type hints
@@ -433,10 +435,10 @@ def validate_parameters(func: Callable) -> Callable:
         for name, value in bound_args.arguments.items():
             if name == 'self':
                 continue
-                
+
             if name in hints:
                 expected_type = hints[name]
-                
+
                 # Handle Optional types
                 if (
                     hasattr(expected_type, '__origin__') and
@@ -447,10 +449,10 @@ def validate_parameters(func: Callable) -> Callable:
                         expected_type = expected_type.__args__[0]
                     else:
                         continue
-                
+
                 # Validate type
                 validate_type(value, expected_type, name)
-                
+
                 # Additional validation based on parameter name
                 if 'price' in name.lower():
                     validate_numeric(value, name, min_value=0)
@@ -458,7 +460,7 @@ def validate_parameters(func: Callable) -> Callable:
                     validate_numeric(value, name, allow_zero=False)
                 elif 'date' in name.lower():
                     validate_date(value, name)
-        
-        return func(self, *args, **kwargs)  # Pass self to the original function
-    
+
+        return func(*args, **kwargs)  # Pass self to the original function
+
     return wrapper

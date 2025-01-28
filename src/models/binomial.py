@@ -118,12 +118,9 @@ class BinomialModel(OptionPricingModel):
                     (1 - params.p) * option_values[i + 1, j]
                 ) * params.discount
 
-        # Calculate Greeks for the result
-        greeks = self.calculate_greeks(S, K, r, sigma, T, option_type)
-
         return OptionResult(
             price=option_values[0, 0],
-            greeks=greeks,
+            greeks={}, # Greeks are now calculated separately
             additional_info={
                 "n_steps": self.n_steps,
                 "parameters": params
@@ -181,19 +178,16 @@ class BinomialModel(OptionPricingModel):
                 if exercise_value > continuation_value:
                     exercise_boundary[i] = current_price
 
-        # Calculate Greeks
-        greeks = self.calculate_greeks(S, K, r, sigma, T, option_type)
-
         return OptionResult(
             price=option_values[0, 0],
-            greeks=greeks,
+            greeks={}, # Greeks are now calculated separately
             additional_info={
                 "n_steps": self.n_steps,
                 "parameters": params,
                 "exercise_boundary": exercise_boundary
             }
         )
-    
+
     def price_call(self, S: float, K: float, r: float, sigma: float, T: float) -> OptionResult:
         """Price a European call option."""
         return self.price_european(S, K, r, sigma, T, option_type="call")
@@ -203,13 +197,9 @@ class BinomialModel(OptionPricingModel):
         return self.price_european(S, K, r, sigma, T, option_type="put")
 
     def calculate_greeks(self, S: float, K: float, r: float, sigma: float,
-                         T: float, option_type: str = "call") -> Dict[str, float]:
+                          T: float, option_type: str = "call") -> Dict[str, float]:
         """
         Calculate option Greeks using finite differences.
-
-        While the binomial model can compute some Greeks directly from the tree,
-        we use finite differences for consistency with other models and to
-        handle both European and American options uniformly.
         """
         eps_S = S * 0.001  # Small change in stock price
         eps_sigma = 0.001  # Small change in volatility
@@ -235,8 +225,8 @@ class BinomialModel(OptionPricingModel):
         if T <= eps_T:
             theta = 0  # At expiry
         else:
-            price_later = price_func(S, K, r, sigma, T + eps_T, option_type).price
-            theta = -(price_later - base_price) / eps_T
+            price_later = price_func(S, K, r, sigma, T - eps_T, option_type).price
+            theta = (price_later - base_price) / eps_T
 
         # Vega: ∂V/∂σ (central difference)
         price_vol_up = price_func(S, K, r, sigma + eps_sigma, T, option_type).price
