@@ -474,12 +474,12 @@ class OptionVisualizerApp:
                 results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
 
             elif model_name == "Binomial":
-                model = self.binomial
-                # Assuming pricing for European options here
-                price_result = model.price_european(S, K, r, sigma, T, option_type) # Add option_type here
-                greeks = model.calculate_greeks(S, K, r, sigma, T, option_type)
-                results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
-
+                    model = self.binomial
+                    # Assuming pricing for European options here
+                    price_result = model.price_european(S, K, r, sigma, T, option_type)
+                    greeks = model.calculate_greeks(S, K, r, sigma, T, option_type)
+                    results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
+                    
             elif model_name == "Monte Carlo":
                 model = self.monte_carlo
                 if option_type == 'call':
@@ -520,8 +520,10 @@ class OptionVisualizerApp:
                     prices.append(price)
             elif model_name == "Binomial":
                 for S in price_range:
-                    price_result = self.binomial.price_european(S, strike_price, result.additional_info['parameters'].r,
-                                                                result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
+                    price_result = self.binomial.price_european(S, strike_price, 
+                                                                result.additional_info['parameters'].r,
+                                                                result.additional_info['parameters'].sigma,
+                                                                result.additional_info['parameters'].T,
                                                                 option_type)
                     prices.append(price_result.price)
             elif model_name == "Monte Carlo":

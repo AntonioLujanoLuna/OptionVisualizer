@@ -16,8 +16,9 @@ class BinomialParameters:
     d: float       # Down factor
     p: float       # Risk-neutral probability of up move
     discount: float # Discount factor per step
-    option_type: str = "call"  # Add option_type with default value
-    r: float = None # Add risk-free rate
+    option_type: str = "call"
+    r: float = None
+    sigma: float = None  # Add sigma here
 
 class BinomialModel(OptionPricingModel):
     """
@@ -60,7 +61,7 @@ class BinomialModel(OptionPricingModel):
         # Calculate per-step discount factor
         discount = np.exp(-r * dt)
 
-        return BinomialParameters(dt, u, d, p, discount, option_type, r)
+        return BinomialParameters(dt, u, d, p, discount, option_type, r, sigma)
 
     def _build_price_tree(self, S: float, params: BinomialParameters) -> np.ndarray:
         """
