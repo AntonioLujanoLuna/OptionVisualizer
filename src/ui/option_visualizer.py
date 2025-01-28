@@ -15,6 +15,7 @@ from src.analytics.risk import RiskAnalyzer
 from src.analytics.volatility import VolatilitySurface
 from .education import OptionsEducation
 from src.config import AppConfig
+from src.models.base import OptionResult
 
 from .pages.home import render_page as render_home
 from .pages.option_pricing import render_page as render_option_pricing
