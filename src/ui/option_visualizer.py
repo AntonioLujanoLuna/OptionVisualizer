@@ -3,6 +3,8 @@ import streamlit as st
 import numpy as np
 from typing import Dict, List, Optional
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots  # Import make_subplots
+
 
 from src.models.black_scholes import BlackScholesModel
 from src.models.binomial import BinomialModel
