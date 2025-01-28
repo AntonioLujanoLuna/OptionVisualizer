@@ -522,7 +522,7 @@ class OptionVisualizerApp:
                 for S in price_range:
                     price_result = self.binomial.price_european(S, strike_price, 
                                                                 result.additional_info['parameters'].r,
-                                                                result.additional_info['parameters'].sigma,
+                                                                result.additional_info['parameters'].sigma, 
                                                                 result.additional_info['parameters'].T,
                                                                 option_type)
                     prices.append(price_result.price)

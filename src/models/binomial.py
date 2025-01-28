@@ -18,7 +18,8 @@ class BinomialParameters:
     discount: float # Discount factor per step
     option_type: str = "call"
     r: float = None
-    sigma: float = None  # Add sigma here
+    sigma: float = None 
+    T: float = None  # Time to expiry
 
 class BinomialModel(OptionPricingModel):
     """
@@ -61,7 +62,7 @@ class BinomialModel(OptionPricingModel):
         # Calculate per-step discount factor
         discount = np.exp(-r * dt)
 
-        return BinomialParameters(dt, u, d, p, discount, option_type, r, sigma)
+        return BinomialParameters(dt, u, d, p, discount, option_type, r, sigma, T)
 
     def _build_price_tree(self, S: float, params: BinomialParameters) -> np.ndarray:
         """
