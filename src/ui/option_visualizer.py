@@ -229,12 +229,6 @@ class OptionVisualizerApp:
                     for greek, value in result.greeks.items():
                         st.metric(greek.capitalize(), f"{value:.4f}")
     
-    def _display_pricing_visualization(self, viz_type: str, results: Dict,
-                                     current_price: float, strike: float):
-        """Create and display interactive pricing visualizations."""
-        # Implementation of visualization logic...
-        pass
-    
     def _render_strategy_tab(self):
         """Render the strategy builder and analysis tab."""
         st.header("Options Strategy Builder")
@@ -496,17 +490,6 @@ class OptionVisualizerApp:
                     for greek, value in result.greeks.items():
                         st.text(f"{greek}: {value:.4f}")
 
-    def _display_pricing_visualization(self, visualization_type, results, underlying_price, strike_price):
-        """Display the selected visualization."""
-        # This function can be expanded to include more sophisticated visualizations
-        # using Plotly or other visualization libraries, based on the selected type.
-        if visualization_type == "Price vs. Underlying":
-            self._plot_price_vs_underlying(results, underlying_price, strike_price)
-        elif visualization_type == "Greeks Profile":
-            self._plot_greeks_profile(results, underlying_price, strike_price)
-        elif visualization_type == "Time Decay":
-            self._plot_time_decay(results, underlying_price, strike_price)
-
     def _plot_price_vs_underlying(self, results, underlying_price, strike_price):
         """Plot option price vs. underlying price for the selected models."""
         fig = go.Figure()
@@ -545,11 +528,78 @@ class OptionVisualizerApp:
                           yaxis_title='Option Price')
         st.plotly_chart(fig)
 
-    def _plot_greeks_profile(self, results, underlying_price, strike_price):
-        """Plot Greeks profile for the selected models."""
-        # This is a placeholder for the actual implementation.
-        # You will need to implement the logic to calculate and plot the Greeks.
-        st.info("Greek profile visualization is not yet implemented.")
+    def _plot_greeks_profile(self, results: Dict, underlying_price: float, strike_price: float):
+        """
+        Plot Greeks profile for the selected models.
+
+        Args:
+            results: Dictionary containing model results including Greeks.
+            underlying_price: Current price of the underlying asset.
+            strike_price: Strike price of the option.
+        """
+        
+        price_range = np.linspace(underlying_price * 0.5, underlying_price * 1.5, 100)
+        fig = make_subplots(rows=3, cols=2, subplot_titles=("Delta", "Gamma", "Theta", "Vega", "Rho"))
+        
+        for model_name, result in results.items():
+            greeks_data = {
+                'delta': [],
+                'gamma': [],
+                'theta': [],
+                'vega': [],
+                'rho': []
+            }
+
+            for S in price_range:
+                if model_name == "Black-Scholes":
+                    greeks = self.black_scholes.calculate_greeks(
+                        S, 
+                        strike_price, 
+                        result.additional_info['parameters'].r, 
+                        result.additional_info['parameters'].sigma, 
+                        result.additional_info['parameters'].T,
+                        result.additional_info['parameters'].option_type
+                    )
+                elif model_name == "Binomial":
+                    greeks = self.binomial.calculate_greeks(
+                        S, 
+                        strike_price, 
+                        result.additional_info['parameters'].r, 
+                        result.additional_info['parameters'].sigma, 
+                        result.additional_info['parameters'].T,
+                        result.additional_info['parameters'].option_type
+                    )
+                elif model_name == "Monte Carlo":
+                    greeks = self.monte_carlo.calculate_greeks(
+                        S, 
+                        strike_price, 
+                        result.additional_info['parameters'].r, 
+                        result.additional_info['parameters'].sigma, 
+                        result.additional_info['parameters'].T,
+                        result.additional_info['parameters'].option_type
+                    )
+
+                for greek in greeks_data:
+                    greeks_data[greek].append(greeks[greek])
+
+            # Add traces for each Greek
+            fig.add_trace(go.Scatter(x=price_range, y=greeks_data['delta'], mode='lines', name=f'{model_name} Delta'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=price_range, y=greeks_data['gamma'], mode='lines', name=f'{model_name} Gamma'), row=1, col=2)
+            fig.add_trace(go.Scatter(x=price_range, y=greeks_data['theta'], mode='lines', name=f'{model_name} Theta'), row=2, col=1)
+            fig.add_trace(go.Scatter(x=price_range, y=greeks_data['vega'], mode='lines', name=f'{model_name} Vega'), row=2, col=2)
+            fig.add_trace(go.Scatter(x=price_range, y=greeks_data['rho'], mode='lines', name=f'{model_name} Rho'), row=3, col=1)
+
+        fig.update_layout(title='Option Greeks Profile', showlegend=True)
+        st.plotly_chart(fig)
+
+    def _display_pricing_visualization(self, visualization_type, results, underlying_price, strike_price):
+        """Create and display interactive pricing visualizations."""
+        if visualization_type == "Price vs. Underlying":
+            self._plot_price_vs_underlying(results, underlying_price, strike_price)
+        elif visualization_type == "Greeks Profile":
+            self._plot_greeks_profile(results, underlying_price, strike_price)
+        elif visualization_type == "Time Decay":
+            self._plot_time_decay(results, underlying_price, strike_price)
 
     def _plot_time_decay(self, results, underlying_price, strike_price):
         """Plot option price vs. time to expiry for the selected models."""
