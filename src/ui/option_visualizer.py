@@ -1,5 +1,6 @@
 # src/ui/option_visualizer.py
 import streamlit as st
+import numpy as np
 from typing import Dict, List, Optional
 import plotly.graph_objects as go
 
