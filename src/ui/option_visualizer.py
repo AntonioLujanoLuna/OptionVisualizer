@@ -209,33 +209,6 @@ class OptionVisualizerApp:
             strike_price
         )
     
-    def _calculate_model_results(self, models: List[str], S: float, K: float,
-                                 T: float, sigma: float, r: float,
-                                 option_type: str) -> Dict[str, float]:
-        """Calculate option prices and Greeks using selected models."""
-        results = {}
-        
-        for model in models:
-            if model == "Black-Scholes":
-                if option_type == "call":
-                    result = self.black_scholes.price_call(S, K, r, sigma, T)
-                else:
-                    result = self.black_scholes.price_put(S, K, r, sigma, T)
-            elif model == "Binomial":
-                result = self.binomial.price_european(
-                    S, K, r, sigma, T,
-                    option_type=option_type
-                )
-            else: # Monte Carlo
-                if option_type == "call":
-                    result = self.monte_carlo.price_call(S, K, r, sigma, T)
-                else:
-                    result = self.monte_carlo.price_put(S, K, r, sigma, T)
-            
-            results[model] = result
-        
-        return results
-    
     def _display_pricing_results(self, results: Dict[str, float]):
         """Display pricing results in a clear, organized manner."""
         st.subheader("Pricing Results")

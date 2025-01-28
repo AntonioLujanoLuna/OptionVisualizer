@@ -9,13 +9,12 @@ This module provides:
 5. Custom validation decorators
 """
 
-import re
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional, Union, Callable
-from decimal import Decimal
 from functools import wraps
 import pandas as pd
-import numpy as np
+import inspect
+from typing import get_type_hints
 
 class ValidationError(Exception):
     """Custom exception for validation errors."""
@@ -422,16 +421,19 @@ def validate_parameters(func: Callable) -> Callable:
     using type hints and optional validation rules.
     """
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(self, *args, **kwargs):  # Added self here
         sig = inspect.signature(func)
-        bound_args = sig.bind(*args, **kwargs)
+        bound_args = sig.bind(self, *args, **kwargs)  # Bind self to the signature
         bound_args.apply_defaults()
-        
+
         # Get type hints
         hints = get_type_hints(func)
-        
+
         # Validate each parameter
         for name, value in bound_args.arguments.items():
+            if name == 'self':
+                continue
+                
             if name in hints:
                 expected_type = hints[name]
                 
@@ -457,6 +459,6 @@ def validate_parameters(func: Callable) -> Callable:
                 elif 'date' in name.lower():
                     validate_date(value, name)
         
-        return func(*args, **kwargs)
+        return func(self, *args, **kwargs)  # Pass self to the original function
     
     return wrapper
