@@ -539,8 +539,15 @@ class OptionVisualizerApp:
         """
         
         price_range = np.linspace(underlying_price * 0.5, underlying_price * 1.5, 100)
-        fig = make_subplots(rows=3, cols=2, subplot_titles=("Delta", "Gamma", "Theta", "Vega", "Rho"))
+        fig = make_subplots(rows=3, cols=2) # Remove subplot_titles argument
         
+        # Manually add annotations for subplot titles
+        fig.add_annotation(x=0.25, y=1, text="Delta", xref="paper", yref="paper", showarrow=False, row=1, col=1)
+        fig.add_annotation(x=0.75, y=1, text="Gamma", xref="paper", yref="paper", showarrow=False, row=1, col=2)
+        fig.add_annotation(x=0.25, y=0.65, text="Theta", xref="paper", yref="paper", showarrow=False, row=2, col=1)
+        fig.add_annotation(x=0.75, y=0.65, text="Vega", xref="paper", yref="paper", showarrow=False, row=2, col=2)
+        fig.add_annotation(x=0.25, y=0.3, text="Rho", xref="paper", yref="paper", showarrow=False, row=3, col=1)
+
         for model_name, result in results.items():
             greeks_data = {
                 'delta': [],
