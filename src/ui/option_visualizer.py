@@ -513,24 +513,26 @@ class OptionVisualizerApp:
                 for S in price_range:
                     if result.additional_info['parameters'].option_type == 'call':
                         price = self.black_scholes.price_call(S, strike_price, result.additional_info['parameters'].r,
-                                                             result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
                     else:
                         price = self.black_scholes.price_put(S, strike_price, result.additional_info['parameters'].r,
                                                             result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
                     prices.append(price)
             elif model_name == "Binomial":
                 for S in price_range:
-                    prices.append(self.binomial.price_european(S, strike_price, result.additional_info['parameters'].r,
+                    # Corrected method call:
+                    price_result = self.binomial.price_european(S, strike_price, result.additional_info['parameters'].r,
                                                             result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
-                                                            result.additional_info['parameters'].option_type).price)
+                                                            result.additional_info['parameters'].option_type)
+                    prices.append(price_result.price)
             elif model_name == "Monte Carlo":
                 for S in price_range:
                     if result.additional_info['parameters'].option_type == 'call':
                         price = self.monte_carlo.price_call(S, strike_price, result.additional_info['parameters'].r,
-                                                           result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
                     else:
                         price = self.monte_carlo.price_put(S, strike_price, result.additional_info['parameters'].r,
-                                                          result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
                     prices.append(price)
 
             fig.add_trace(go.Scatter(x=price_range, y=prices, mode='lines', name=model_name))
