@@ -11,11 +11,12 @@ from src.config import AppConfig
 @dataclass
 class BinomialParameters:
     """Parameters for the binomial tree model."""
-    dt: float     # Time step size
-    u: float      # Up factor
-    d: float      # Down factor
-    p: float      # Risk-neutral probability of up move
-    discount: float  # Discount factor per step
+    dt: float      # Time step size
+    u: float       # Up factor
+    d: float       # Down factor
+    p: float       # Risk-neutral probability of up move
+    discount: float # Discount factor per step
+    option_type: str = "call"  # Add option_type with default value
 
 class BinomialModel(OptionPricingModel):
     """
@@ -37,7 +38,7 @@ class BinomialModel(OptionPricingModel):
         """Initialize the binomial model with the specified number of steps."""
         self.n_steps = n_steps
 
-    def _calculate_parameters(self, sigma: float, T: float, r: float) -> BinomialParameters:
+    def _calculate_parameters(self, sigma: float, T: float, r: float, option_type: str = "call") -> BinomialParameters:
         """
         Calculate the basic parameters of the binomial tree.
 
@@ -58,7 +59,7 @@ class BinomialModel(OptionPricingModel):
         # Calculate per-step discount factor
         discount = np.exp(-r * dt)
 
-        return BinomialParameters(dt, u, d, p, discount)
+        return BinomialParameters(dt, u, d, p, discount, option_type) # Pass option_type
 
     def _build_price_tree(self, S: float, params: BinomialParameters) -> np.ndarray:
         """

@@ -476,16 +476,16 @@ class OptionVisualizerApp:
             elif model_name == "Binomial":
                 model = self.binomial
                 # Assuming pricing for European options here
-                price_result = model.price_european(S, K, r, sigma, T, option_type)
+                price_result = model.price_european(S, K, r, sigma, T, option_type) # Add option_type here
                 greeks = model.calculate_greeks(S, K, r, sigma, T, option_type)
                 results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
 
             elif model_name == "Monte Carlo":
                 model = self.monte_carlo
                 if option_type == 'call':
-                    price_result = model.price_call(S, K, r, sigma, T)
+                    price_result = model.price_call(S, K, r, sigma, T, option_type=option_type) # Pass option_type
                 else:
-                    price_result = model.price_put(S, K, r, sigma, T)
+                    price_result = model.price_put(S, K, r, sigma, T, option_type=option_type) # Pass option_type
                 greeks = model.calculate_greeks(S, K, r, sigma, T, option_type)
                 results[model_name] = OptionResult(price=price_result.price, greeks=greeks, additional_info=price_result.additional_info)
         return results
@@ -520,19 +520,20 @@ class OptionVisualizerApp:
                     prices.append(price)
             elif model_name == "Binomial":
                 for S in price_range:
-                    # Corrected method call:
                     price_result = self.binomial.price_european(S, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
-                                                            result.additional_info['parameters'].option_type)
+                                                                result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
+                                                                option_type) # Pass option_type
                     prices.append(price_result.price)
             elif model_name == "Monte Carlo":
                 for S in price_range:
                     if result.additional_info['parameters'].option_type == 'call':
                         price = self.monte_carlo.price_call(S, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
+                                                            option_type=option_type).price # Pass option_type
                     else:
                         price = self.monte_carlo.price_put(S, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                                                        result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
+                                                        option_type=option_type).price # Pass option_type
                     prices.append(price)
 
             fig.add_trace(go.Scatter(x=price_range, y=prices, mode='lines', name=model_name))

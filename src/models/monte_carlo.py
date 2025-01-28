@@ -111,7 +111,7 @@ class MonteCarloModel(OptionPricingModel):
     
     @validate_parameters
     def price_call(self, S: float, K: float, r: float, sigma: float, T: float,
-                   use_control_variate: bool = True) -> OptionResult:
+                use_control_variate: bool = True, option_type: str = "call") -> OptionResult: # Added option_type
         """
         Price a European call option using Monte Carlo simulation.
         """
@@ -156,7 +156,7 @@ class MonteCarloModel(OptionPricingModel):
 
     @validate_parameters
     def price_put(self, S: float, K: float, r: float, sigma: float, T: float,
-                  use_control_variate: bool = True) -> OptionResult:
+              use_control_variate: bool = True, option_type: str = "put") -> OptionResult: # Added option_type
         """
         Price a European put option using Monte Carlo simulation.
         """
@@ -192,7 +192,7 @@ class MonteCarloModel(OptionPricingModel):
         )
 
     def calculate_greeks(self, S: float, K: float, r: float, sigma: float,
-                          T: float, option_type: str = "call") -> Dict[str, float]:
+                        T: float, option_type: str = "call") -> Dict[str, float]:
         """
         Calculate option Greeks using finite difference methods.
         """
@@ -206,37 +206,45 @@ class MonteCarloModel(OptionPricingModel):
         random_state = np.random.get_state()
 
         # Price function based on option type
-        price_func = self.price_call if option_type.lower() == "call" else self.price_put
+        if option_type == "call":
+            price_func = self.price_call
+        elif option_type == "put":
+            price_func = self.price_put
+        else:
+            raise ValueError("Invalid option type")
 
-        # Delta: ∂V/∂S (central difference)
-        price_up = price_func(S + eps_S, K, r, sigma, T).price
-        price_down = price_func(S - eps_S, K, r, sigma, T).price
+        # Calculate base price - pass option_type here
+        base_result = price_func(S, K, r, sigma, T, option_type=option_type)
+        base_price = base_result.price
+
+        # Delta: ∂V/∂S (central difference) - pass option_type here
+        price_up = price_func(S + eps_S, K, r, sigma, T, option_type=option_type).price
+        price_down = price_func(S - eps_S, K, r, sigma, T, option_type=option_type).price
         delta = (price_up - price_down) / (2 * eps_S)
 
-        # Gamma: ∂²V/∂S² (central difference)
-        base_price = price_func(S, K, r, sigma, T).price
+        # Gamma: ∂²V/∂S² (central difference) - no need for option_type here
         gamma = (price_up - 2 * base_price + price_down) / (eps_S * eps_S)
 
-        # Theta: -∂V/∂T (forward difference)
+        # Theta: -∂V/∂T (forward difference) - pass option_type here
         if T <= eps_T:
             # Special handling for very short time to maturity
-            price_up_T = price_func(S, K, r, sigma, 2 * eps_T).price
-            base_price = price_func(S, K, r, sigma, eps_T).price
+            price_up_T = price_func(S, K, r, sigma, 2 * eps_T, option_type=option_type).price
+            base_price = price_func(S, K, r, sigma, eps_T, option_type=option_type).price
             theta = -(price_up_T - base_price) / eps_T
         else:
-            price_up_T = price_func(S, K, r, sigma, T + eps_T).price
-            base_price = price_func(S, K, r, sigma, T).price
+            price_up_T = price_func(S, K, r, sigma, T + eps_T, option_type=option_type).price
+            base_price = price_func(S, K, r, sigma, T, option_type=option_type).price
             theta = -(price_up_T - base_price) / eps_T
 
-        # Vega: ∂V/∂σ (central difference)
-        price_up_sig = price_func(S, K, r, sigma + eps_sigma, T).price
-        price_down_sig = price_func(S, K, r, sigma - eps_sigma, T).price
-        vega = (price_up_sig - price_down_sig) / (2 * eps_sigma)
+        # Vega: ∂V/∂σ (central difference) - pass option_type here
+        price_vol_up = price_func(S, K, r, sigma + eps_sigma, T, option_type=option_type).price
+        price_vol_down = price_func(S, K, r, sigma - eps_sigma, T, option_type=option_type).price
+        vega = (price_vol_up - price_vol_down) / (2 * eps_sigma)
 
-        # Rho: ∂V/∂r (central difference)
-        price_up_r = price_func(S, K, r + eps_r, sigma, T).price
-        price_down_r = price_func(S, K, r - eps_r, sigma, T).price
-        rho = (price_up_r - price_down_r) / (2 * eps_r)
+        # Rho: ∂V/∂r (central difference) - pass option_type here
+        price_r_up = price_func(S, K, r + eps_r, sigma, T, option_type=option_type).price
+        price_r_down = price_func(S, K, r - eps_r, sigma, T, option_type=option_type).price
+        rho = (price_r_up - price_r_down) / (2 * eps_r)
 
         # Restore original random state
         np.random.set_state(random_state)
