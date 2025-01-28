@@ -112,7 +112,7 @@ class OptionVisualizerApp:
                 """
             )
     
-        def _render_pricing_tab(self):
+    def _render_pricing_tab(self):
         """Render the option pricing analysis tab."""
         st.header("Option Pricing Analysis")
 
