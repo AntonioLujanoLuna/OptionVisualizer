@@ -112,13 +112,13 @@ class OptionVisualizerApp:
                 """
             )
     
-    def _render_pricing_tab(self):
+        def _render_pricing_tab(self):
         """Render the option pricing analysis tab."""
         st.header("Option Pricing Analysis")
-        
+
         # Create two columns for input parameters
         col1, col2 = st.columns(2)
-        
+
         with col1:
             # Basic parameters
             st.subheader("Option Parameters")
@@ -129,7 +129,7 @@ class OptionVisualizerApp:
                 step=1.0,
                 help="Current price of the underlying asset"
             )
-            
+
             strike_price = st.number_input(
                 "Strike Price",
                 min_value=1.0,
@@ -137,7 +137,7 @@ class OptionVisualizerApp:
                 step=1.0,
                 help="Strike price of the option"
             )
-            
+
             time_to_expiry = st.slider(
                 "Time to Expiry (Years)",
                 min_value=0.1,
@@ -146,7 +146,7 @@ class OptionVisualizerApp:
                 step=0.1,
                 help="Time until option expiration in years"
             )
-        
+
         with col2:
             # Market parameters
             st.subheader("Market Parameters")
@@ -158,7 +158,7 @@ class OptionVisualizerApp:
                 step=0.05,
                 help="Annualized volatility"
             )
-            
+
             risk_free_rate = st.slider(
                 "Risk-free Rate",
                 min_value=0.0,
@@ -167,7 +167,7 @@ class OptionVisualizerApp:
                 step=0.01,
                 help="Annual risk-free interest rate"
             )
-        
+
         # Model selection and comparison
         st.subheader("Model Selection")
         models = st.multiselect(
@@ -175,17 +175,17 @@ class OptionVisualizerApp:
             ["Black-Scholes", "Binomial", "Monte Carlo"],
             default=["Black-Scholes"]
         )
-        
+
         option_type = st.radio(
             "Option Type",
             ["Call", "Put"],
             horizontal=True
         )
-        
+
         if not models:
             st.warning("Please select at least one model to analyze.")
             return
-        
+
         # Calculate and display results
         results = self._calculate_model_results(
             models,
@@ -196,21 +196,22 @@ class OptionVisualizerApp:
             risk_free_rate,
             option_type.lower()
         )
-        
+
         self._display_pricing_results(results)
-        
+
         # Display interactive visualizations
         st.subheader("Visual Analysis")
         visualization_type = st.selectbox(
             "Select Visualization",
             ["Price vs. Underlying", "Greeks Profile", "Time Decay"]
         )
-        
+
         self._display_pricing_visualization(
             visualization_type,
             results,
             underlying_price,
-            strike_price
+            strike_price,
+            option_type 
         )
     
     def _display_pricing_results(self, results: Dict[str, float]):
@@ -502,7 +503,7 @@ class OptionVisualizerApp:
                     for greek, value in result.greeks.items():
                         st.text(f"{greek}: {value:.4f}")
 
-    def _plot_price_vs_underlying(self, results, underlying_price, strike_price):
+    def _plot_price_vs_underlying(self, results, underlying_price, strike_price, option_type): # Add option_type as a parameter
         """Plot option price vs. underlying price for the selected models."""
         fig = go.Figure()
         price_range = np.linspace(underlying_price * 0.5, underlying_price * 1.5, 100)
@@ -513,29 +514,29 @@ class OptionVisualizerApp:
                 for S in price_range:
                     if result.additional_info['parameters'].option_type == 'call':
                         price = self.black_scholes.price_call(S, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                                                                result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
                     else:
                         price = self.black_scholes.price_put(S, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
+                                                                result.additional_info['parameters'].sigma, result.additional_info['parameters'].T).price
                     prices.append(price)
             elif model_name == "Binomial":
                 for S in price_range:
-                    price_result = self.binomial.price_european(S, strike_price, 
+                    price_result = self.binomial.price_european(S, strike_price,
                                                                 result.additional_info['parameters'].r,
-                                                                result.additional_info['parameters'].sigma, 
+                                                                result.additional_info['parameters'].sigma,
                                                                 result.additional_info['parameters'].T,
-                                                                option_type)
+                                                                option_type) # Pass option_type
                     prices.append(price_result.price)
             elif model_name == "Monte Carlo":
                 for S in price_range:
                     if result.additional_info['parameters'].option_type == 'call':
                         price = self.monte_carlo.price_call(S, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
-                                                            option_type=option_type).price # Pass option_type
+                                                                result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
+                                                                option_type=option_type).price # Pass option_type
                     else:
                         price = self.monte_carlo.price_put(S, strike_price, result.additional_info['parameters'].r,
-                                                        result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
-                                                        option_type=option_type).price # Pass option_type
+                                                                result.additional_info['parameters'].sigma, result.additional_info['parameters'].T,
+                                                                option_type=option_type).price # Pass option_type
                     prices.append(price)
 
             fig.add_trace(go.Scatter(x=price_range, y=prices, mode='lines', name=model_name))
@@ -545,7 +546,7 @@ class OptionVisualizerApp:
                           yaxis_title='Option Price')
         st.plotly_chart(fig)
 
-    def _plot_greeks_profile(self, results: Dict, underlying_price: float, strike_price: float):
+    def _plot_greeks_profile(self, results: Dict, underlying_price: float, strike_price: float, option_type: str):
         """
         Plot Greeks profile for the selected models.
 
@@ -553,11 +554,12 @@ class OptionVisualizerApp:
             results: Dictionary containing model results including Greeks.
             underlying_price: Current price of the underlying asset.
             strike_price: Strike price of the option.
+            option_type: Type of the option (call or put).
         """
-        
+
         price_range = np.linspace(underlying_price * 0.5, underlying_price * 1.5, 100)
         fig = make_subplots(rows=3, cols=2) # Remove subplot_titles argument
-        
+
         # Manually add annotations for subplot titles
         fig.add_annotation(x=0.25, y=1, text="Delta", xref="paper", yref="paper", showarrow=False, row=1, col=1)
         fig.add_annotation(x=0.75, y=1, text="Gamma", xref="paper", yref="paper", showarrow=False, row=1, col=2)
@@ -577,30 +579,30 @@ class OptionVisualizerApp:
             for S in price_range:
                 if model_name == "Black-Scholes":
                     greeks = self.black_scholes.calculate_greeks(
-                        S, 
-                        strike_price, 
-                        result.additional_info['parameters'].r, 
-                        result.additional_info['parameters'].sigma, 
+                        S,
+                        strike_price,
+                        result.additional_info['parameters'].r,
+                        result.additional_info['parameters'].sigma,
                         result.additional_info['parameters'].T,
-                        result.additional_info['parameters'].option_type
+                        option_type
                     )
                 elif model_name == "Binomial":
                     greeks = self.binomial.calculate_greeks(
-                        S, 
-                        strike_price, 
-                        result.additional_info['parameters'].r, 
-                        result.additional_info['parameters'].sigma, 
+                        S,
+                        strike_price,
+                        result.additional_info['parameters'].r,
+                        result.additional_info['parameters'].sigma,
                         result.additional_info['parameters'].T,
-                        result.additional_info['parameters'].option_type
+                        option_type
                     )
                 elif model_name == "Monte Carlo":
                     greeks = self.monte_carlo.calculate_greeks(
-                        S, 
-                        strike_price, 
-                        result.additional_info['parameters'].r, 
-                        result.additional_info['parameters'].sigma, 
+                        S,
+                        strike_price,
+                        result.additional_info['parameters'].r,
+                        result.additional_info['parameters'].sigma,
                         result.additional_info['parameters'].T,
-                        result.additional_info['parameters'].option_type
+                        option_type
                     )
 
                 for greek in greeks_data:
@@ -625,7 +627,7 @@ class OptionVisualizerApp:
         elif visualization_type == "Time Decay":
             self._plot_time_decay(results, underlying_price, strike_price)
 
-    def _plot_time_decay(self, results, underlying_price, strike_price):
+    def _plot_time_decay(self, results, underlying_price, strike_price, option_type):
         """Plot option price vs. time to expiry for the selected models."""
         fig = go.Figure()
         time_range = np.linspace(0.1, 2.0, 100)  # Example time range
@@ -636,24 +638,25 @@ class OptionVisualizerApp:
                 for T in time_range:
                     if result.additional_info['parameters'].option_type == 'call':
                         price = self.black_scholes.price_call(underlying_price, strike_price, result.additional_info['parameters'].r,
-                                                             result.additional_info['parameters'].sigma, T).price
+                                                               result.additional_info['parameters'].sigma, T).price
                     else:
                         price = self.black_scholes.price_put(underlying_price, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, T).price
+                                                              result.additional_info['parameters'].sigma, T).price
                     prices.append(price)
             elif model_name == "Binomial":
                 for T in time_range:
-                    prices.append(self.binomial.price_european(underlying_price, strike_price, result.additional_info['parameters'].r,
-                                                            result.additional_info['parameters'].sigma, T,
-                                                            result.additional_info['parameters'].option_type).price)
+                    price_result = self.binomial.price_european(underlying_price, strike_price, result.additional_info['parameters'].r,
+                                                                result.additional_info['parameters'].sigma, T,
+                                                                option_type)
+                    prices.append(price_result.price)
             elif model_name == "Monte Carlo":
                 for T in time_range:
                     if result.additional_info['parameters'].option_type == 'call':
                         price = self.monte_carlo.price_call(underlying_price, strike_price, result.additional_info['parameters'].r,
-                                                           result.additional_info['parameters'].sigma, T).price
+                                                               result.additional_info['parameters'].sigma, T).price
                     else:
                         price = self.monte_carlo.price_put(underlying_price, strike_price, result.additional_info['parameters'].r,
-                                                          result.additional_info['parameters'].sigma, T).price
+                                                              result.additional_info['parameters'].sigma, T).price
                     prices.append(price)
 
             fig.add_trace(go.Scatter(x=time_range, y=prices, mode='lines', name=model_name))
